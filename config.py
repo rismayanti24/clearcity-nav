@@ -26,7 +26,7 @@ DASH_OFF = 8            # Panjang celah antar garis (piksel)
 # ══════════════════════════════════════════════════════════════
 C_BG       = (13,  15,  23)    # Warna latar belakang layar
 C_GRASS    = (16,  20,  30)    # Warna rumput / tanah
-C_SW       = (42,  48,  65)    # Warna trotoar (sidewalk) — lebih terang dari jalan
+C_SW       = (42,  48,  65)    # Warna trotoar (sidewalk) 
 C_ROAD     = (55,  62,  85)    # Warna badan jalan — kontras jelas dari rumput
 C_DASH     = (90, 100, 140)    # Warna garis putus-putus di tengah jalan
 C_PATH     = (0,   210, 110)   # Warna overlay jalur hasil pathfinding
