@@ -2,7 +2,7 @@
 config.py
 =========
 Semua konstanta global: ukuran layar, ukuran tile, warna (cyberpunk palette),
-gaya bangunan, dan parameter rendering. cantik 
+gaya bangunan, dan parameter rendering. 
 """
 
 # ══════════════════════════════════════════════════════════════
