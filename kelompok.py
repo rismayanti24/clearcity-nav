@@ -26,13 +26,20 @@ import pygame
 # ── Import dari modul lain ────────────────────────────────────
 from config import (
     W, H, T, GCOLS, GROWS, FPS,
-    C_BG, C_UI, C_UIK, C_BTN_BD, C_PATH, C_EXPLORED,
-    C_ORIGIN, C_DEST
+    C_BG, C_GRASS, C_UI, C_UIK, C_BTN_BD, C_PATH, C_EXPLORED,
+    C_ORIGIN, C_DEST,
+    C_PATH_ASTAR, C_PATH_BFS, C_PATH_DIJKSTRA,
+    C_EXPL_ASTAR, C_EXPL_BFS, C_EXPL_DIJKSTRA,
+    C_PATH_OUTLINE_ASTAR, C_PATH_OUTLINE_BFS, C_PATH_OUTLINE_DIJKSTRA,
+    LOD_FAR_ZOOM, LOD_MED_ZOOM,
 )
 from grid import EMPTY, STRAIGHT, CURVE, DIAGONAL, TJUNCTION, CROSS, get_ports
-from mapgen import generate_map, generate_environment, _all_road_cells, ENV_NONE
+from mapgen import (generate_map, generate_environment, _all_road_cells,
+                    ENV_NONE, ENV_SW, ENV_TREE,
+                    ENV_B0, ENV_B1, ENV_B2,
+                    ENV_RUMAH, ENV_RUKO, ENV_MASJID, ENV_SPBU, ENV_TAMAN)
 from pathfinding import astar, dijkstra, bfs_pathfind, build_world_path
-from rendering import TileCache, EnvCache, build_minimap
+from rendering import TileCache, EnvCache, build_minimap, draw_lamp
 from entities import Camera, Car, Button
 
 
@@ -95,11 +102,28 @@ class ClearCityNav:
         self._last_drag  = None
         self._click_start = None
 
+        # ── Performance caches ────────────────────────────────
+        self._cached_wpath  = None   # cached world path (list of (wx,wy))
+        self._cached_path_key = None # key to detect path changes
+        self._env_scale_cache = {}   # {(env_type, c, r, isz): Surface}
+        self._block_overlay_cache = {}  # {isz: Surface}
+        self._map_surf_cache = None
+        self._map_surf_zoom = None
+        self._map_surf_lod = None
+        self._map_surf_blocked_hash = None
+
         self.current_algo = "astar"
         self.algo_stats   = {
             "astar":    {"nodes": 0, "ms": 0.0, "path_len": 0},
             "dijkstra": {"nodes": 0, "ms": 0.0, "path_len": 0},
             "bfs":      {"nodes": 0, "ms": 0.0, "path_len": 0},
+        }
+
+        # Warna berbeda tiap algoritma
+        self.algo_colors = {
+            "astar":    {"path": C_PATH_ASTAR,    "explored": C_EXPL_ASTAR,    "outline": C_PATH_OUTLINE_ASTAR},
+            "dijkstra": {"path": C_PATH_DIJKSTRA, "explored": C_EXPL_DIJKSTRA, "outline": C_PATH_OUTLINE_DIJKSTRA},
+            "bfs":      {"path": C_PATH_BFS,      "explored": C_EXPL_BFS,      "outline": C_PATH_OUTLINE_BFS},
         }
 
         bx, bw, bh = 10, 180, 28
@@ -157,6 +181,7 @@ class ClearCityNav:
                 tt = self.grid.cells[r][c].type
                 if tt in self.tile_counts:
                     self.tile_counts[tt] += 1
+        self._map_surf_cache = None
 
     def _toggle_car(self):
         if self.car.active and not self.car.arrived:
@@ -196,6 +221,7 @@ class ClearCityNav:
             "dijkstra": {"nodes": 0, "ms": 0.0, "path_len": 0},
             "bfs":      {"nodes": 0, "ms": 0.0, "path_len": 0},
         }
+        self._map_surf_cache = None
 
     def _toggle_follow(self):
         self.follow_car = not self.follow_car
@@ -346,13 +372,14 @@ class ClearCityNav:
                 else:
                     if (c, r) != self.origin and (c, r) != self.dest:
                         self.blocked.add((c, r))
+                self._map_surf_cache = None
                 if self.origin and self.dest:
                     self._do_pathfind()
                     # Jika mobil sedang aktif/paused → reroute ke jalur baru
                     if self.car.active or self.car.paused:
                         self._reroute_car()
 
-    def _draw_panel(self):
+    def _draw_panel(self, lod=2):
         panel = pygame.Surface((self.panel_w, H), pygame.SRCALPHA)
         panel.fill((12, 16, 24, 230))
         self.screen.blit(panel, (0, 0))
@@ -401,6 +428,8 @@ class ClearCityNav:
                        "PAUSED"  if self.car.paused  else
                        "ACTIVE"  if self.car.active  else "IDLE"),
             ("Follow", "ON" if self.follow_car else "OFF"),
+            ("Speed",  f"{self.car.speed:.1f} px/f"),
+            ("LOD",    ["FAR", "MED", "CLOSE"][lod]),
             ("Zoom",   f"{self.camera.zoom:.2f}"),
             ("FPS",    str(int(self.clock.get_fps()))),
         ]
@@ -437,18 +466,21 @@ class ClearCityNav:
         for label, key in _algo_labels:
             s      = self.algo_stats[key]
             is_sel = (key == self.current_algo)
-            col    = (0, 255, 200) if is_sel else (80, 110, 140)
-            prefix = "\u25b6" if is_sel else " "
-            nodes_s = str(s["nodes"]) if s["nodes"] else "-"
-            ms_s    = f"{s['ms']:.1f}" if s["nodes"] else "-"
-            row     = f"{prefix}{label:<5} {nodes_s:>5}n {ms_s:>7}ms"
-            rt      = self.font.render(row, True, col)
+            # Warna teks = warna jalur algoritma masing-masing
+            algo_col = self.algo_colors[key]["path"]
+            col      = algo_col if is_sel else tuple(c // 2 for c in algo_col)
+            prefix   = "\u25b6" if is_sel else " "
+            nodes_s  = str(s["nodes"]) if s["nodes"] else "-"
+            ms_s     = f"{s['ms']:.1f}" if s["nodes"] else "-"
+            row      = f"{prefix}{label:<5} {nodes_s:>5}n {ms_s:>7}ms"
+            rt       = self.font.render(row, True, col)
             self.screen.blit(rt, (8, sy))
             sy += 14
-        cy = H - 100
+        cy = H - 185
         pygame.draw.line(self.screen, C_BTN_BD, (10, cy - 4), (self.panel_w - 10, cy - 4), 1)
         for line in ["L-Click: Set origin/dest", "R-Click: Toggle block",
-                     "Scroll: Zoom in/out", "Drag: Pan camera"]:
+                     "Scroll: Zoom in/out", "Up/Down Key: Car speed",
+                     "Drag: Pan camera"]:
             ct = self.font.render(line, True, (100, 120, 140))
             self.screen.blit(ct, (14, cy))
             cy += 15
@@ -483,71 +515,227 @@ class ClearCityNav:
         pygame.draw.circle(glow, (*col, 40), (sz * 2, sz * 2), sz * 2)
         self.screen.blit(glow, (int(sx) - sz * 2, int(sy) - sz * 2))
 
-    def draw(self):
-        self.screen.fill(C_BG)
-        c0, c1, r0, r1 = self.camera.get_visible_tiles()
-        for r in range(r0, r1):
-            for c in range(c0, c1):
-                sx, sy = self.camera.world_to_screen(c * T, r * T)
-                sz     = T * self.camera.zoom
-                if sx + sz < 0 or sy + sz < 0 or sx > W or sy > H:
-                    continue
-                isz = int(sz)
-                if isz < 1:
-                    continue
+    def _get_block_overlay(self, isz):
+        """Ambil/buat overlay roadblock dari cache. Hindari alokasi Surface tiap frame."""
+        if isz not in self._block_overlay_cache:
+            overlay = pygame.Surface((isz, isz), pygame.SRCALPHA)
+            overlay.fill((255, 30, 30, 80))
+            lw = max(1, isz // 20)
+            pygame.draw.line(overlay, (255, 60, 60), (0, 0), (isz, isz), lw)
+            pygame.draw.line(overlay, (255, 60, 60), (isz, 0), (0, isz), lw)
+            self._block_overlay_cache[isz] = overlay
+        return self._block_overlay_cache[isz]
+
+    def _get_scaled_env(self, ev, c, r, isz):
+        """Ambil env surface yang sudah di-scale dari cache."""
+        key = (ev, c, r, isz)
+        if key not in self._env_scale_cache:
+            # Eviction: bersihkan jika terlalu besar (zoom berubah → stale entries)
+            if len(self._env_scale_cache) > 2000:
+                self._env_scale_cache.clear()
+            esurf = self.env_cache.get(ev, c, r)
+            if esurf:
+                if isz != T:
+                    self._env_scale_cache[key] = pygame.transform.smoothscale(esurf, (isz, isz))
+                else:
+                    self._env_scale_cache[key] = esurf
+            else:
+                self._env_scale_cache[key] = None
+        return self._env_scale_cache[key]
+
+    def _get_cached_wpath(self):
+        """Ambil world path dari cache. Hanya rebuild jika path berubah."""
+        path_key = tuple(self.path) if self.path else None
+        if path_key != self._cached_path_key:
+            self._cached_path_key = path_key
+            if self.path and len(self.path) >= 2:
+                self._cached_wpath = build_world_path(self.grid, self.path)
+            else:
+                self._cached_wpath = None
+        return self._cached_wpath
+
+    def _render_map_to_surface(self, zoom, lod):
+        # Calculate size of the map in pixels at this zoom
+        map_w = int(GCOLS * T * zoom)
+        map_h = int(GROWS * T * zoom)
+        
+        # Create a surface for the entire map
+        surf = pygame.Surface((map_w, map_h))
+        # Fill with grass color
+        surf.fill(C_GRASS)
+        
+        C_ROAD_LOD0       = (55,  62,  85)
+        C_INTERSECT_LOD0  = (75,  85, 115)
+        _BLDG_TYPES = (ENV_B0, ENV_B1, ENV_B2,
+                       ENV_RUMAH, ENV_RUKO, ENV_MASJID,
+                       ENV_SPBU, ENV_TAMAN)
+                       
+        sz = T * zoom
+        isz = int(sz)
+        if isz < 1:
+            return surf
+            
+        for r in range(GROWS):
+            for c in range(GCOLS):
+                tx = int(c * sz)
+                ty = int(r * sz)
+                
                 t = self.grid.get(c, r)
                 if t and t.type != EMPTY:
-                    surf = self.tile_cache.get(t.type, t.rotation, isz)
-                    if surf:
-                        self.screen.blit(surf, (int(sx), int(sy)))
+                    # ── Render jalan ──────────────────────────
+                    if lod == 0:
+                        col = C_INTERSECT_LOD0 if t.type in (TJUNCTION, CROSS) else C_ROAD_LOD0
+                        pygame.draw.rect(surf, col, (tx, ty, isz, isz))
+                    else:
+                        tsurf = self.tile_cache.get(t.type, t.rotation, isz, lod)
+                        if tsurf:
+                            surf.blit(tsurf, (tx, ty))
+                            
+                    # Draw roadblock overlay
                     if (c, r) in self.blocked:
-                        overlay = pygame.Surface((isz, isz), pygame.SRCALPHA)
-                        overlay.fill((255, 30, 30, 80))
-                        pygame.draw.line(overlay, (255, 60, 60),
-                                         (0, 0), (isz, isz), max(1, isz // 20))
-                        pygame.draw.line(overlay, (255, 60, 60),
-                                         (isz, 0), (0, isz), max(1, isz // 20))
-                        self.screen.blit(overlay, (int(sx), int(sy)))
+                        surf.blit(self._get_block_overlay(isz), (tx, ty))
+                        
+                    # Draw street lamps (LOD 1)
+                    if lod == 1 and t.type in (TJUNCTION, CROSS):
+                        lamp_offsets = [
+                            (tx + 2,       ty + 2),
+                            (tx + isz - 2, ty + 2),
+                            (tx + 2,       ty + isz - 2),
+                            (tx + isz - 2, ty + isz - 2),
+                        ]
+                        for lx, ly in lamp_offsets:
+                            draw_lamp(surf, lx, ly, zoom, lod)
                 else:
-                    ev    = self.env[r][c] if self.env else ENV_NONE
-                    esurf = self.env_cache.get(ev, c, r)
-                    if esurf:
-                        scaled = (pygame.transform.smoothscale(esurf, (isz, isz))
-                                  if isz != T else esurf)
-                        self.screen.blit(scaled, (int(sx), int(sy)))
-        if self.explored and self.camera.zoom > 0.15:
+                    ev = self.env[r][c] if self.env else ENV_NONE
+                    if lod == 0:
+                        if ev in _BLDG_TYPES:
+                            pygame.draw.rect(surf, (22, 28, 40), (tx, ty, isz, isz))
+                    elif lod == 1:
+                        if ev != ENV_TREE:
+                            scaled = self._get_scaled_env(ev, c, r, isz)
+                            if scaled:
+                                surf.blit(scaled, (tx, ty))
+        return surf
+
+    def draw(self):
+        self.screen.fill(C_BG)
+
+        # ── Hitung LOD berdasarkan zoom ──────────────────────
+        zoom = self.camera.zoom
+        if zoom >= LOD_MED_ZOOM:
+            lod = 2      # dekat: full detail
+        elif zoom >= LOD_FAR_ZOOM:
+            lod = 1      # sedang: bangunan, jalan, lampu
+        else:
+            lod = 0      # jauh: blok warna saja
+
+        c0, c1, r0, r1 = self.camera.get_visible_tiles()
+
+        # ── Draw map background (cached when lod < 2, direct when lod == 2) ──
+        if lod < 2:
+            blocked_hash = hash(tuple(sorted(list(self.blocked))))
+            if (self._map_surf_cache is None or 
+                self._map_surf_zoom != zoom or 
+                self._map_surf_lod != lod or 
+                self._map_surf_blocked_hash != blocked_hash):
+                
+                self._map_surf_cache = self._render_map_to_surface(zoom, lod)
+                self._map_surf_zoom = zoom
+                self._map_surf_lod = lod
+                self._map_surf_blocked_hash = blocked_hash
+            
+            mx, my = self.camera.world_to_screen(0, 0)
+            self.screen.blit(self._map_surf_cache, (int(mx), int(my)))
+        else:
+            # Direct rendering (lod == 2, zoom >= 0.55, very few tiles visible)
+            sz = T * zoom
+            isz = int(sz)
+            for r in range(r0, r1):
+                for c in range(c0, c1):
+                    sx, sy = self.camera.world_to_screen(c * T, r * T)
+                    if sx + sz < 0 or sy + sz < 0 or sx > W or sy > H:
+                        continue
+
+                    t = self.grid.get(c, r)
+                    if t and t.type != EMPTY:
+                        # ── Render jalan ──────────────────────────
+                        surf = self.tile_cache.get(t.type, t.rotation, isz, lod)
+                        if surf:
+                            self.screen.blit(surf, (int(sx), int(sy)))
+
+                        # Roadblock overlay (dari cache)
+                        if (c, r) in self.blocked:
+                            self.screen.blit(self._get_block_overlay(isz), (int(sx), int(sy)))
+
+                        # ── Lampu jalan di persimpangan (LOD 2) ───
+                        if t.type in (TJUNCTION, CROSS):
+                            lamp_offsets = [
+                                (sx + 2,       sy + 2),
+                                (sx + sz - 2,  sy + 2),
+                                (sx + 2,       sy + sz - 2),
+                                (sx + sz - 2,  sy + sz - 2),
+                            ]
+                            for lx, ly in lamp_offsets:
+                                draw_lamp(self.screen, lx, ly, zoom, lod)
+
+                    else:
+                        # ── Render environment ────────────────────
+                        ev = self.env[r][c] if self.env else ENV_NONE
+                        scaled = self._get_scaled_env(ev, c, r, isz)
+                        if scaled:
+                            self.screen.blit(scaled, (int(sx), int(sy)))
+
+        # ── Explored nodes (LOD 1+, max 500 visible) ─────────
+        _expl_col = self.algo_colors[self.current_algo]["explored"]
+        if self.explored and lod >= 1 and zoom > 0.15:
+            r2 = max(2, int(T * zoom * 0.15))
+            count = 0
             for ec, er in self.explored:
+                if ec < c0 or ec >= c1 or er < r0 or er >= r1:
+                    continue
                 sx, sy = self.camera.world_to_screen(
                     ec * T + T // 2, er * T + T // 2)
-                r2 = max(2, int(T * self.camera.zoom * 0.15))
-                pygame.draw.circle(self.screen, C_EXPLORED, (int(sx), int(sy)), r2)
-        if self.path and len(self.path) >= 2 and self.camera.zoom > 0.1:
-            wpath = build_world_path(self.grid, self.path)
-            if len(wpath) >= 2:
-                pts  = []
-                step = max(1, len(wpath) // 800)
-                for i in range(0, len(wpath), step):
-                    wx, wy = wpath[i]
-                    sx, sy = self.camera.world_to_screen(wx, wy)
-                    pts.append((int(sx), int(sy)))
-                wx, wy = wpath[-1]
+                pygame.draw.circle(self.screen, _expl_col, (int(sx), int(sy)), r2)
+                count += 1
+                if count > 500:
+                    break
+
+        # ── Path line (cached world path) ────────────────────
+        _path_col    = self.algo_colors[self.current_algo]["path"]
+        _outline_col = self.algo_colors[self.current_algo]["outline"]
+        wpath = self._get_cached_wpath()
+        if wpath and len(wpath) >= 2 and zoom > 0.05:
+            pts  = []
+            step = max(1, len(wpath) // 800)
+            for i in range(0, len(wpath), step):
+                wx, wy = wpath[i]
                 sx, sy = self.camera.world_to_screen(wx, wy)
-                if not pts or pts[-1] != (int(sx), int(sy)):
-                    pts.append((int(sx), int(sy)))
-                lw = max(2, int(3 * self.camera.zoom))
-                if len(pts) >= 2:
-                    pygame.draw.lines(self.screen, (0, 120, 60), False, pts, lw + 3)
-                    pygame.draw.lines(self.screen, C_PATH,       False, pts, lw)
+                pts.append((int(sx), int(sy)))
+            wx, wy = wpath[-1]
+            sx, sy = self.camera.world_to_screen(wx, wy)
+            if not pts or pts[-1] != (int(sx), int(sy)):
+                pts.append((int(sx), int(sy)))
+            lw = max(2, int(3 * zoom))
+            if len(pts) >= 2:
+                pygame.draw.lines(self.screen, _outline_col, False, pts, lw + 3)
+                pygame.draw.lines(self.screen, _path_col,    False, pts, lw)
+
+        # ── Markers (semua LOD) ──────────────────────────────
         if self.origin:
             self._draw_marker(self.origin[0], self.origin[1], C_ORIGIN, "A")
         if self.dest:
             self._draw_marker(self.dest[0], self.dest[1], C_DEST, "B")
+
+        # ── Car (semua LOD) ──────────────────────────────────
         self.car.draw(self.screen, self.camera)
-        self._draw_panel()
+
+        self._draw_panel(lod)
 
     def run(self):
         running = True
         while running:
+            dt = self.clock.tick(FPS) / 1000.0
+            dt = min(dt, 0.1)  # Batasi lompatan jika FPS drop drastis
             mx, my = pygame.mouse.get_pos()
             for b in self.buttons:   b.handle((mx, my))
             for b in self.algo_btns: b.handle((mx, my))
@@ -561,6 +749,8 @@ class ClearCityNav:
                     elif ev.key == pygame.K_n:     self._new_map()
                     elif ev.key == pygame.K_c:     self._clear_all()
                     elif ev.key == pygame.K_f:     self._toggle_follow()
+                    elif ev.key == pygame.K_UP:    self.car.speed = min(15.0, self.car.speed + 1.0)
+                    elif ev.key == pygame.K_DOWN:  self.car.speed = max(1.0, self.car.speed - 1.0)
                 elif ev.type == pygame.MOUSEBUTTONDOWN:
                     if ev.pos[0] <= self.panel_w:
                         for b in self.buttons:   b.clicked(ev.pos)
@@ -605,14 +795,13 @@ class ClearCityNav:
                 elif ev.type == pygame.MOUSEWHEEL:
                     factor = 1.15 if ev.y > 0 else 1 / 1.15
                     self.camera.zoom_at(mx, my, factor)
-            self.car.update()
+            self.car.update(dt)
             if self.car.arrived and self.btn_car.text != "Start Car":
                 self.btn_car.text = "Start Car"
             if self.follow_car and self.car.active and not self.car.paused:
                 self.camera.center_on(self.car.x, self.car.y)
             self.draw()
             pygame.display.flip()
-            self.clock.tick(FPS)
         pygame.quit()
         sys.exit()
 
