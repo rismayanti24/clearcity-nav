@@ -155,7 +155,7 @@ def _dsw(s, x, y, tt, rot, sz):
             pygame.draw.rect(s, C_SW, (x + sz - mg, y, mg, sz))
 
 
-def _dstr(s, x, y, rot, sz):
+def _dstr(s, x, y, rot, sz, lod=2):
     """STRAIGHT — Rectangle sederhana, semua proporsi di-scale ke sz."""
     sf = sz / T
     rw = max(2, int(RW * sf))
@@ -168,17 +168,19 @@ def _dstr(s, x, y, rot, sz):
         pygame.draw.rect(s, C_SW, (x, y, mg, sz))
         pygame.draw.rect(s, C_SW, (x + sz - mg, y, mg, sz))
         pygame.draw.rect(s, C_ROAD, (x + mg, y, rw, sz))
-        cx = x + sz // 2
-        _dashline(s, cx, y + pad, cx, y + sz - pad, True, da, ga)
+        if lod >= 2:
+            cx = x + sz // 2
+            _dashline(s, cx, y + pad, cx, y + sz - pad, True, da, ga)
     else:
         pygame.draw.rect(s, C_SW, (x, y, sz, mg))
         pygame.draw.rect(s, C_SW, (x, y + sz - mg, sz, mg))
         pygame.draw.rect(s, C_ROAD, (x, y + mg, sz, rw))
-        cy = y + sz // 2
-        _dashline(s, x + pad, cy, x + sz - pad, cy, False, da, ga)
+        if lod >= 2:
+            cy = y + sz // 2
+            _dashline(s, x + pad, cy, x + sz - pad, cy, False, da, ga)
 
 
-def _dcurv(s, x, y, rot, sz):
+def _dcurv(s, x, y, rot, sz, lod=2):
     """CURVE — Tikungan 90° Bézier band, di-render di ukuran sz."""
     sf = sz / T
     rw = max(2, int(RW * sf))
@@ -193,10 +195,11 @@ def _dcurv(s, x, y, rot, sz):
     cc = _bquad(pm[pf], (cx, cy), pm[pt], segs)
     _dsw(s, x, y, CURVE, rot, sz)
     _fband(s, cc, rw // 2 + max(1, int(3 * sf)), C_ROAD)
-    _bdash(s, cc, C_DASH, da, ga)
+    if lod >= 2:
+        _bdash(s, cc, C_DASH, da, ga)
 
 
-def _ddiag(s, x, y, rot, sz):
+def _ddiag(s, x, y, rot, sz, lod=2):
     """DIAGONAL — Dirender lurus (rectangle) agar peta tetap bersih."""
     sf  = sz / T
     rw  = max(2, int(RW * sf))
@@ -209,15 +212,17 @@ def _ddiag(s, x, y, rot, sz):
         pygame.draw.rect(s, C_SW, (x, y, mg, sz))
         pygame.draw.rect(s, C_SW, (x + sz - mg, y, mg, sz))
         pygame.draw.rect(s, C_ROAD, (x + mg, y, rw, sz))
-        _dashline(s, x + sz // 2, y + pad, x + sz // 2, y + sz - pad, True, da, ga)
+        if lod >= 2:
+            _dashline(s, x + sz // 2, y + pad, x + sz // 2, y + sz - pad, True, da, ga)
     else:
         pygame.draw.rect(s, C_SW, (x, y, sz, mg))
         pygame.draw.rect(s, C_SW, (x, y + sz - mg, sz, mg))
         pygame.draw.rect(s, C_ROAD, (x, y + mg, sz, rw))
-        _dashline(s, x + pad, y + sz // 2, x + sz - pad, y + sz // 2, False, da, ga)
+        if lod >= 2:
+            _dashline(s, x + pad, y + sz // 2, x + sz - pad, y + sz // 2, False, da, ga)
 
 
-def _dtjunc(s, x, y, rot, sz):
+def _dtjunc(s, x, y, rot, sz, lod=2):
     """T-JUNCTION — Pertigaan, di-render di ukuran sz."""
     sf = sz / T
     rw = max(2, int(RW * sf))
@@ -233,12 +238,13 @@ def _dtjunc(s, x, y, rot, sz):
         for p2 in ports[i + 1:]:
             c2 = _bquad(pm[p1], ctr, pm[p2], segs)
             _fband(s, c2, rw // 2 + max(1, int(3 * sf)), C_ROAD)
-            _bdash(s, c2, C_DASH, da, ga)
+            if lod >= 2:
+                _bdash(s, c2, C_DASH, da, ga)
     ir = max(3, rw // 2 + int(2 * sf))
     pygame.draw.circle(s, C_ROAD, (int(ctr[0]), int(ctr[1])), ir)
 
 
-def _dcross(s, x, y, rot, sz):
+def _dcross(s, x, y, rot, sz, lod=2):
     """CROSS — Perempatan, di-render di ukuran sz."""
     sf = sz / T
     rw = max(2, int(RW * sf))
@@ -258,18 +264,43 @@ def _dcross(s, x, y, rot, sz):
     cr = max(1, mg - max(1, int(4 * sf)))
     for px, py in [(x, y), (x + sz, y), (x, y + sz), (x + sz, y + sz)]:
         pygame.draw.circle(s, C_SW, (px, py), cr)
-    for p1, p2 in [(0, 2), (1, 3)]:
-        c2 = _bquad(pm[p1], ctr, pm[p2], segs)
-        _bdash(s, c2, C_DASH, da, ga)
+    if lod >= 2:
+        for p1, p2 in [(0, 2), (1, 3)]:
+            c2 = _bquad(pm[p1], ctr, pm[p2], segs)
+            _bdash(s, c2, C_DASH, da, ga)
 
 
-def _draw_tile(s, x, y, tt, rot, sz):
+def _draw_tile(s, x, y, tt, rot, sz, lod=2):
     """Dispatcher: render tile tipe tt rotasi rot di ukuran sz piksel."""
-    if tt == STRAIGHT:    _dstr(s, x, y, rot, sz)
-    elif tt == CURVE:     _dcurv(s, x, y, rot, sz)
-    elif tt == DIAGONAL:  _ddiag(s, x, y, rot, sz)
-    elif tt == TJUNCTION: _dtjunc(s, x, y, rot, sz)
-    elif tt == CROSS:     _dcross(s, x, y, rot, sz)
+    if tt == STRAIGHT:    _dstr(s, x, y, rot, sz, lod)
+    elif tt == CURVE:     _dcurv(s, x, y, rot, sz, lod)
+    elif tt == DIAGONAL:  _ddiag(s, x, y, rot, sz, lod)
+    elif tt == TJUNCTION: _dtjunc(s, x, y, rot, sz, lod)
+    elif tt == CROSS:     _dcross(s, x, y, rot, sz, lod)
+
+
+def draw_lamp(surf, cx, cy, zoom, lod):
+    """Gambar tiang lampu jalan di posisi layar (cx, cy)."""
+    if lod < 1:
+        return
+    
+    # Ukuran lampu di-scale sesuai zoom
+    base_r = max(1.5, int(4 * zoom))
+    glow_r = max(4, int(15 * zoom))
+    
+    # Tiang lampu (kecil abu-abu)
+    pygame.draw.circle(surf, (100, 100, 110), (int(cx), int(cy)), max(1, int(2 * zoom)))
+    
+    # Cahaya lampu
+    if lod >= 2:
+        # Glow semi-transparan (kuning neon hangat)
+        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(glow_surf, (255, 255, 150, 40), (glow_r, glow_r), glow_r)
+        pygame.draw.circle(glow_surf, (255, 255, 200, 90), (glow_r, glow_r), glow_r // 2)
+        surf.blit(glow_surf, (int(cx - glow_r), int(cy - glow_r)))
+    
+    # Lampu inti
+    pygame.draw.circle(surf, (255, 255, 200), (int(cx), int(cy)), base_r)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -282,12 +313,12 @@ class TileCache:
     Alih-alih menyimpan Surface T×T lalu scale saat render (→ jagged),
     cache ini menyimpan Surface yang sudah dirender di ukuran display aktual.
 
-    Key: (tile_type, rotation, quantized_display_size)
+    Key: (tile_type, rotation, quantized_display_size, lod)
     Kuantisasi ke kelipatan 4px untuk membatasi jumlah entry cache.
     Cache otomatis dibersihkan saat terlalu besar (maks 600 entry).
 
     Cara pakai:
-      surf = tile_cache.get(tile_type, rotation, display_size)
+      surf = tile_cache.get(tile_type, rotation, display_size, lod)
       screen.blit(surf, (sx, sy))  # langsung blit, tanpa scale!
     """
 
@@ -298,15 +329,16 @@ class TileCache:
     def build(self):
         """Pre-build cache di ukuran native T untuk render awal yang cepat."""
         self.cache.clear()
-        for tt in [STRAIGHT, CURVE, DIAGONAL, TJUNCTION, CROSS]:
-            rots = len(TILE_PORTS[tt])
-            for rot in range(rots):
-                s = pygame.Surface((T, T))
-                s.fill(C_GRASS)
-                _draw_tile(s, 0, 0, tt, rot, T)
-                self.cache[(tt, rot, T)] = s
+        for lod in (1, 2):
+            for tt in [STRAIGHT, CURVE, DIAGONAL, TJUNCTION, CROSS]:
+                rots = len(TILE_PORTS[tt])
+                for rot in range(rots):
+                    s = pygame.Surface((T, T))
+                    s.fill(C_GRASS)
+                    _draw_tile(s, 0, 0, tt, rot, T, lod)
+                    self.cache[(tt, rot, T, lod)] = s
 
-    def get(self, tt, rot, display_size=None):
+    def get(self, tt, rot, display_size=None, lod=2):
         """
         Ambil Surface tile yang sudah dirender di ukuran display_size.
         Jika belum ada di cache → render baru, simpan, return.
@@ -316,7 +348,7 @@ class TileCache:
 
         # Kuantisasi ke kelipatan 4px
         qsz = max(4, ((display_size + 2) // 4) * 4)
-        key = (tt, rot, qsz)
+        key = (tt, rot, qsz, lod)
 
         if key not in self.cache:
             # Eviction sederhana: bersihkan semua jika terlalu penuh
@@ -330,7 +362,7 @@ class TileCache:
             else:
                 s = pygame.Surface((qsz, qsz))
                 s.fill(C_GRASS)
-                _draw_tile(s, 0, 0, tt, rot, qsz)
+                _draw_tile(s, 0, 0, tt, rot, qsz, lod)
             self.cache[key] = s
 
         return self.cache[key]

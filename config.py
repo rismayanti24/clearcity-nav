@@ -75,3 +75,26 @@ BLDG_STYLES = [
         neon    = (200, 170, 0), 
     ),
 ]
+
+# ══════════════════════════════════════════════════════════════
+# LOD & PATHFINDING COLORS
+# ══════════════════════════════════════════════════════════════
+LOD_FAR_ZOOM = 0.20   # zoom < ini -> LOD 0 (jauh: blok warna saja)
+LOD_MED_ZOOM = 0.55   # zoom < ini -> LOD 1 (sedang: bangunan, jalan, lampu), >= ini -> LOD 2 (dekat)
+
+# Warna pathfinding dan node eksplorasi per algoritma
+# A* (cyberpunk neon green/teal)
+C_PATH_ASTAR         = (0,   255, 120)
+C_EXPL_ASTAR         = (0,   70,  45)
+C_PATH_OUTLINE_ASTAR = (0,   100, 50)
+
+# Dijkstra (neon cyan/blue)
+C_PATH_DIJKSTRA         = (0,   220, 255)
+C_EXPL_DIJKSTRA         = (0,   50,  80)
+C_PATH_OUTLINE_DIJKSTRA = (0,   80,  120)
+
+# BFS (neon pink/purple)
+C_PATH_BFS         = (240, 0,   255)
+C_EXPL_BFS         = (80,  0,   80)
+C_PATH_OUTLINE_BFS = (120, 0,   120)
+
