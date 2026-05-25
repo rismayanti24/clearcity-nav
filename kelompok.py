@@ -147,7 +147,8 @@ class ClearCityNav:
         self.algo_btns[0].is_active = True
 
         self._rebuild_map()
-
+        
+      # Menampilkan layar loading saat proses generate map berlangsung
     def _show_loading(self, msg="Generating map..."):
         self.screen.fill(C_BG)
         t = self.font_b.render(msg, True, C_UI)
