@@ -336,27 +336,34 @@ def _bfs_path(grid, sc, sr, tc, tr):
     (tidak hanya mengikuti port jalan). Digunakan untuk menyambungkan
     komponen-komponen jalan yang terpisah.
     
+    Optimized: menggunakan parent dict instead of copying path lists.
     Kompleksitas: O(V + E) di mana V = jumlah sel grid, E = koneksi antar sel
     Return: list koordinat [(c,r), ...] atau None jika tidak ada jalur.
     """
     if sc == tc and sr == tr:
         return [(sc, sr)]
-    visited = {(sc, sr)}
-    queue   = deque([(sc, sr, [(sc, sr)])])
+    parent  = {(sc, sr): None}
+    queue   = deque([(sc, sr)])
     while queue:
-        cx, cy, path = queue.popleft()
+        cx, cy = queue.popleft()
         for d in range(4):
             dc, dr = DIR_DELTA[d]
             nc, nr = cx + dc, cy + dr
             if not grid.in_bounds(nc, nr):
                 continue
-            if (nc, nr) in visited:
+            if (nc, nr) in parent:
                 continue
-            visited.add((nc, nr))
-            np = path + [(nc, nr)]
+            parent[(nc, nr)] = (cx, cy)
             if nc == tc and nr == tr:
-                return np
-            queue.append((nc, nr, np))
+                # Reconstruct path
+                path = []
+                node = (nc, nr)
+                while node is not None:
+                    path.append(node)
+                    node = parent[node]
+                path.reverse()
+                return path
+            queue.append((nc, nr))
     return None
 
 
@@ -617,14 +624,14 @@ def generate_map(cols, rows, seed=None):
 
     # ── Phase 2: Branching growth ────────────────────────────
     for iteration in range(40):
-        road_cells = _all_road_cells(grid)
-        if len(road_cells) >= max_road:
+        if grid.road_count >= max_road:
             break
+        road_cells = _all_road_cells(grid)
         if not road_cells:
             break
         rng.shuffle(road_cells)
         for rc, rr in road_cells[:max(1, len(road_cells) // 3)]:
-            if len(_all_road_cells(grid)) >= max_road:
+            if grid.road_count >= max_road:
                 break
             t = grid.get(rc, rr)
             if t is None:
@@ -642,8 +649,10 @@ def generate_map(cols, rows, seed=None):
     # ── Phase 3: Fill empty regions ──────────────────────────
     region_size = max(8, min(cols, rows) // 5)
     for ry in range(0, rows, region_size):
+        if grid.road_count >= max_road:
+            break
         for rx in range(0, cols, region_size):
-            if len(_all_road_cells(grid)) >= max_road:
+            if grid.road_count >= max_road:
                 break
             has_road = False
             for dr in range(min(region_size, rows - ry)):
@@ -701,14 +710,15 @@ def generate_map(cols, rows, seed=None):
 
     # ── Phase 5: Border exits ─────────────────────────────────
     exits = _choose_border_exits(grid, rng, count=12)
+    road_cells = _all_road_cells(grid)  # compute once, not per exit
     for ec, er, ed in exits:
-        road_cells = _all_road_cells(grid)
         if not road_cells:
-            continue
+            break
         closest = min(road_cells, key=lambda p: abs(p[0] - ec) + abs(p[1] - er))
         path    = _bfs_path(grid, ec, er, closest[0], closest[1])
         if path:
             _build_road_along_path(grid, path, rng)
+            road_cells = _all_road_cells(grid)  # refresh after adding roads
 
     # ── Phase 6: Heal dead ends ───────────────────────────────
     _heal_dead_ends(grid, rng, max_iters=10)

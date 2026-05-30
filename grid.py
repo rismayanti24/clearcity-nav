@@ -119,6 +119,7 @@ class Grid:
     def __init__(self, cols, rows):
         self.cols  = cols
         self.rows  = rows
+        self.road_count = 0  # Track jumlah tile jalan untuk O(1) count
         # Inisialisasi semua tile sebagai EMPTY
         self.cells = [[Tile() for _ in range(cols)] for _ in range(rows)]
 
@@ -137,6 +138,12 @@ class Grid:
         Tidak melakukan apa-apa jika koordinat di luar batas.
         """
         if 0 <= c < self.cols and 0 <= r < self.rows:
+            old_type = self.cells[r][c].type
+            # Update road_count tracker
+            if old_type == EMPTY and tt != EMPTY:
+                self.road_count += 1
+            elif old_type != EMPTY and tt == EMPTY:
+                self.road_count -= 1
             self.cells[r][c].type     = tt
             self.cells[r][c].rotation = rot
 

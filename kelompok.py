@@ -112,6 +112,16 @@ class ClearCityNav:
         self._map_surf_lod = None
         self._map_surf_blocked_hash = None
 
+        # ── Panel scroll state ────────────────────────────────
+        self.panel_scroll     = 0
+        self.panel_scroll_max = 0
+        self._panel_content_h = 0     # total content height (set by _draw_panel)
+        self._panel_scroll_area_top = 310   # y where scrollable area starts
+
+        # ── Minimap interaction state ─────────────────────────
+        self._mm_rect  = None         # pygame.Rect of minimap on screen
+        self._mm_drag  = False        # dragging on minimap?
+
         self.current_algo = "astar"
         self.algo_stats   = {
             "astar":    {"nodes": 0, "ms": 0.0, "path_len": 0},
@@ -156,14 +166,19 @@ class ClearCityNav:
         pygame.display.flip()
 
     def _rebuild_map(self):
+        t0 = time.time()
         self._show_loading("Generating road network...")
         self.grid = generate_map(GCOLS, GROWS, self.seed)
-        self._show_loading("Generating environment...")
+        t1 = time.time()
+        self._show_loading(f"Road network done ({t1-t0:.1f}s). Generating environment...")
         self.env = generate_environment(self.grid, self.seed)
-        self._show_loading("Building tile cache...")
+        t2 = time.time()
+        self._show_loading(f"Environment done ({t2-t1:.1f}s). Building caches...")
         self.tile_cache.build()
         self.env_cache.build()
         self.minimap_surf = build_minimap(self.grid)
+        t3 = time.time()
+        print(f"Map generated in {t3-t0:.2f}s (road={t1-t0:.2f}s env={t2-t1:.2f}s cache={t3-t2:.2f}s)")
         self.origin = None
         self.dest   = None
         self.path   = None
@@ -381,123 +396,270 @@ class ClearCityNav:
                         self._reroute_car()
 
     def _draw_panel(self, lod=2):
+        # ── Panel background ─────────────────────────────────
         panel = pygame.Surface((self.panel_w, H), pygame.SRCALPHA)
-        panel.fill((12, 16, 24, 230))
+        panel.fill((20, 28, 38, 230))
         self.screen.blit(panel, (0, 0))
         pygame.draw.line(self.screen, C_BTN_BD, (self.panel_w, 0), (self.panel_w, H), 1)
+
+        # ── Header ────────────────────────────────────────────
         t = self.font_t.render("NAV SIM", True, C_UI)
         self.screen.blit(t, (self.panel_w // 2 - t.get_width() // 2, 12))
         pygame.draw.line(self.screen, C_BTN_BD, (10, 42), (self.panel_w - 10, 42), 1)
         st = self.font.render("Snake Growth Engine", True, C_UIK)
         self.screen.blit(st, (self.panel_w // 2 - st.get_width() // 2, 50))
+
+        # ── Buttons ───────────────────────────────────────────
         for b in self.buttons:
             b.draw(self.screen, self.font)
+
+        # ── Algorithm selector ────────────────────────────────
         pygame.draw.line(self.screen, C_BTN_BD, (10, 276), (self.panel_w - 10, 276), 1)
-        albl = self.font.render("ALGORITHM:", True, C_UIK)
-        self.screen.blit(albl, (10, 279))
         for b in self.algo_btns:
             b.draw(self.screen, self.font)
+
+        # ── Precompute stats ──────────────────────────────────
         total_road = sum(self.tile_counts.values())
         str_count  = self.tile_counts.get(STRAIGHT, 0)
         str_pct    = (str_count / total_road * 100) if total_road else 0
-        str_ok     = str_pct <= 10.0  # aturan: straight ≤ 10%
+        str_ok     = str_pct <= 10.0
+
+        C_BIGOH    = (80, 255, 180)
+        C_STR_OK   = (0, 220, 100)
+        C_STR_OVER = (255, 80, 60)
+        str_col    = C_STR_OK if str_ok else C_STR_OVER
+
         _complexity = {
             "astar":    ("O((V+E)logV)", "O(V)"),
             "dijkstra": ("O((V+E)logV)", "O(V)"),
             "bfs":      ("O(V+E)",       "O(V)"),
         }
         time_o, space_o = _complexity[self.current_algo]
-        sy    = 312
-        stats = [
-            ("Seed",      str(self.seed)),
-            ("Total Road", str(total_road)),
-            ("Straight",  f"{str_count} ({str_pct:.1f}%)", "STRAIGHT"),
-            ("Diagonal",  str(self.tile_counts.get(DIAGONAL, 0))),
-            ("Curve",     str(self.tile_counts.get(CURVE, 0))),
-            ("T-junc",    str(self.tile_counts.get(TJUNCTION, 0))),
-            ("Cross",     str(self.tile_counts.get(CROSS, 0))),
-            ("", ""),
-            ("Mode",      self.placing_mode.upper()),
-            ("Blocks",    str(len(self.blocked))),
-            ("Nodes",     str(self.astar_nodes)),
-            ("Time ms",   f"{self.astar_time:.2f}"),
-            ("Path len",  str(len(self.path)) if self.path else "\u2014"),
-            ("Time O",    time_o),
-            ("Space O",   space_o),
-            ("", ""),
-            ("Car",    "ARRIVED" if self.car.arrived else
-                       "PAUSED"  if self.car.paused  else
-                       "ACTIVE"  if self.car.active  else "IDLE"),
-            ("Follow", "ON" if self.follow_car else "OFF"),
-            ("Speed",  f"{self.car.speed:.1f} px/f"),
-            ("LOD",    ["FAR", "MED", "CLOSE"][lod]),
-            ("Zoom",   f"{self.camera.zoom:.2f}"),
-            ("FPS",    str(int(self.clock.get_fps()))),
-        ]
-        C_BIGOH     = (80, 255, 180)
-        C_STR_OK    = (0, 220, 100)   # hijau: ≤ 10% terpenuhi
-        C_STR_OVER  = (255, 80, 60)   # merah: > 10% melebihi batas
-        for item in stats:
-            if len(item) == 2:
-                key, val = item
-                tag = None
-            else:
-                key, val, tag = item
-            if key == "":
-                sy += 4
-                continue
-            kt = self.font.render(f"{key}:", True, C_UIK)
-            if tag == "STRAIGHT":
-                vc = C_STR_OK if str_ok else C_STR_OVER
-            elif key in ("Time O", "Space O"):
-                vc = C_BIGOH
-            else:
-                vc = C_UI
-            vt = self.font.render(val, True, vc)
-            self.screen.blit(kt, (14, sy))
-            self.screen.blit(vt, (self.panel_w - 14 - vt.get_width(), sy))
-            sy += 15
-        sy += 4
-        pygame.draw.line(self.screen, C_BTN_BD, (10, sy), (self.panel_w - 10, sy), 1)
-        sy += 5
-        hdr = self.font.render("ALGO COMPARISON", True, C_UIK)
-        self.screen.blit(hdr, (self.panel_w // 2 - hdr.get_width() // 2, sy))
-        sy += 14
+
+        car_status = ("ARRIVED" if self.car.arrived else
+                      "PAUSED"  if self.car.paused  else
+                      "ACTIVE"  if self.car.active  else "IDLE")
+
+        # ── Build content list for scrollable area ────────────
+        # Each item: ("section", title) or ("row", key, val, color)
+        items = []
+        items.append(("section", "MAP STATS"))
+        items.append(("row", "Seed",   str(self.seed), C_UI))
+        items.append(("row", "Roads",  str(total_road), C_UI))
+        items.append(("row", "Str",    f"{str_count} ({str_pct:.1f}%)", str_col))
+        items.append(("row", "Diag",   str(self.tile_counts.get(DIAGONAL, 0)), C_UI))
+        items.append(("row", "Curve",  str(self.tile_counts.get(CURVE, 0)), C_UI))
+        items.append(("row", "T-jnc",  str(self.tile_counts.get(TJUNCTION, 0)), C_UI))
+        items.append(("row", "Cross",  str(self.tile_counts.get(CROSS, 0)), C_UI))
+        items.append(("gap",))
+        items.append(("section", "PATHFINDING"))
+        items.append(("row", "Mode",     self.placing_mode.upper(), C_UI))
+        items.append(("row", "Blocks",   str(len(self.blocked)), C_UI))
+        items.append(("row", "Nodes",    str(self.astar_nodes), C_UI))
+        items.append(("row", "Time ms",  f"{self.astar_time:.2f}", C_UI))
+        items.append(("row", "Path",     str(len(self.path)) if self.path else "\u2014", C_UI))
+        items.append(("row", "Time O",   time_o, C_BIGOH))
+        items.append(("row", "Space O",  space_o, C_BIGOH))
+        items.append(("gap",))
+        items.append(("section", "CAR & VIEW"))
+        items.append(("row", "Car",    car_status, C_UI))
+        items.append(("row", "Follow", "ON" if self.follow_car else "OFF", C_UI))
+        items.append(("row", "Speed",  f"{self.car.speed:.1f} px/f", C_UI))
+        items.append(("row", "LOD",    ["FAR", "MED", "CLOSE"][lod], C_UI))
+        items.append(("row", "Zoom",   f"{self.camera.zoom:.2f}", C_UI))
+        items.append(("row", "FPS",    str(int(self.clock.get_fps())), C_UI))
+        items.append(("gap",))
+        items.append(("section", "ALGO COMPARISON"))
         _algo_labels = [("A*", "astar"), ("Dijk", "dijkstra"), ("BFS", "bfs")]
         for label, key in _algo_labels:
             s      = self.algo_stats[key]
             is_sel = (key == self.current_algo)
-            # Warna teks = warna jalur algoritma masing-masing
             algo_col = self.algo_colors[key]["path"]
             col      = algo_col if is_sel else tuple(c // 2 for c in algo_col)
             prefix   = "\u25b6" if is_sel else " "
             nodes_s  = str(s["nodes"]) if s["nodes"] else "-"
             ms_s     = f"{s['ms']:.1f}" if s["nodes"] else "-"
-            row      = f"{prefix}{label:<5} {nodes_s:>5}n {ms_s:>7}ms"
-            rt       = self.font.render(row, True, col)
-            self.screen.blit(rt, (8, sy))
-            sy += 14
-        cy = H - 185
-        pygame.draw.line(self.screen, C_BTN_BD, (10, cy - 4), (self.panel_w - 10, cy - 4), 1)
-        for line in ["L-Click: Set origin/dest", "R-Click: Toggle block",
-                     "Scroll: Zoom in/out", "Up/Down Key: Car speed",
-                     "Drag: Pan camera"]:
-            ct = self.font.render(line, True, (100, 120, 140))
-            self.screen.blit(ct, (14, cy))
-            cy += 15
-        if self.minimap_surf:
-            mm = pygame.transform.scale(self.minimap_surf, (90, 90))
-            mx = self.panel_w // 2 - 45
-            my = cy + 4
-            self.screen.blit(mm, (mx, my))
-            cs   = 90 / max(GCOLS, GROWS)
-            x0, y0 = self.camera.screen_to_world(self.panel_w, 0)
-            x1, y1 = self.camera.screen_to_world(W, H)
-            rx = mx + int(x0 / T * cs)
-            ry = my + int(y0 / T * cs)
-            rw = max(2, int((x1 - x0) / T * cs))
-            rh = max(2, int((y1 - y0) / T * cs))
-            pygame.draw.rect(self.screen, C_ORIGIN, (rx, ry, rw, rh), 1)
+            row_txt  = f"{prefix}{label:<5} {nodes_s:>5}n {ms_s:>7}ms"
+            items.append(("algo", row_txt, col))
+        items.append(("gap",))
+        items.append(("section", "CONTROLS"))
+        ctrl_lines = [
+            "L-click: Set origin/dest",
+            "R-click: Toggle block",
+            "Scroll:  Zoom in/out",
+            "Up/Down: Car speed",
+            "Drag:    Pan camera",
+        ]
+        for line in ctrl_lines:
+            items.append(("ctrl", line))
+
+        # ── Measure total content height ──────────────────────
+        total_h = 0
+        for item in items:
+            if item[0] == "section":
+                total_h += 17
+            elif item[0] == "row":
+                total_h += 14
+            elif item[0] == "algo":
+                total_h += 14
+            elif item[0] == "ctrl":
+                total_h += 14
+            elif item[0] == "gap":
+                total_h += 4
+        self._panel_content_h = total_h
+
+        # ── Scrollable area dimensions ────────────────────────
+        scroll_top = self._panel_scroll_area_top
+        scroll_bot = H  # bottom of panel
+        visible_h  = scroll_bot - scroll_top
+        self.panel_scroll_max = max(0, total_h - visible_h)
+        self.panel_scroll = max(0, min(self.panel_scroll, self.panel_scroll_max))
+
+        # ── Render scrollable content with clipping ───────────
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(pygame.Rect(0, scroll_top, self.panel_w, visible_h))
+
+        sy = scroll_top - self.panel_scroll
+        for item in items:
+            if item[0] == "section":
+                title = item[1]
+                if sy + 17 > scroll_top - 20 and sy < scroll_bot + 20:
+                    pygame.draw.line(self.screen, (40, 55, 70),
+                                     (10, sy), (self.panel_w - 10, sy), 1)
+                    hdr = self.font.render(title, True, C_BTN_BD)
+                    self.screen.blit(hdr, (self.panel_w // 2 - hdr.get_width() // 2, sy + 3))
+                sy += 17
+            elif item[0] == "row":
+                _, key, val, vc = item
+                if sy + 14 > scroll_top - 20 and sy < scroll_bot + 20:
+                    kt = self.font.render(f"{key}:", True, C_UIK)
+                    vt = self.font.render(val, True, vc)
+                    self.screen.blit(kt, (14, sy))
+                    self.screen.blit(vt, (self.panel_w - 14 - vt.get_width(), sy))
+                sy += 14
+            elif item[0] == "algo":
+                _, row_txt, col = item
+                if sy + 14 > scroll_top - 20 and sy < scroll_bot + 20:
+                    rt = self.font.render(row_txt, True, col)
+                    self.screen.blit(rt, (8, sy))
+                sy += 14
+            elif item[0] == "ctrl":
+                _, line = item
+                if sy + 14 > scroll_top - 20 and sy < scroll_bot + 20:
+                    ct = self.font.render(line, True, (80, 100, 125))
+                    self.screen.blit(ct, (14, sy))
+                sy += 14
+            elif item[0] == "gap":
+                sy += 4
+
+        self.screen.set_clip(old_clip)
+
+        # ── Scroll indicator (right edge of panel) ────────────
+        if self.panel_scroll_max > 0:
+            bar_h  = max(20, int(visible_h * visible_h / total_h))
+            bar_y  = scroll_top + int((visible_h - bar_h) * self.panel_scroll / self.panel_scroll_max)
+            bar_r  = pygame.Rect(self.panel_w - 4, bar_y, 3, bar_h)
+            pygame.draw.rect(self.screen, (80, 100, 130, 150), bar_r, border_radius=1)
+
+    def _draw_minimap(self):
+        """Draw interactive minimap at the bottom-right corner of the screen."""
+        if not self.minimap_surf:
+            return
+        mm_size = 160
+        margin  = 10
+        mx = W - mm_size - margin
+        my = H - mm_size - margin - 18  # extra space for title
+
+        # ── Title ─────────────────────────────────────────────
+        title = self.font.render("MINIMAP  (click to navigate)", True, C_UIK)
+        title_y = my - 2
+        # Background behind title
+        tbg = pygame.Surface((mm_size + 8, 16), pygame.SRCALPHA)
+        tbg.fill((20, 28, 38, 200))
+        self.screen.blit(tbg, (mx - 4, title_y - 2))
+        self.screen.blit(title, (mx, title_y))
+
+        my += 14  # shift map down below title
+
+        # ── Background ────────────────────────────────────────
+        bg = pygame.Surface((mm_size + 8, mm_size + 8), pygame.SRCALPHA)
+        bg.fill((20, 28, 38, 200))
+        self.screen.blit(bg, (mx - 4, my - 4))
+
+        # ── Minimap image ─────────────────────────────────────
+        mm = pygame.transform.scale(self.minimap_surf, (mm_size, mm_size))
+        self.screen.blit(mm, (mx, my))
+
+        # ── Store rect for click detection ────────────────────
+        self._mm_rect = pygame.Rect(mx, my, mm_size, mm_size)
+        cs = mm_size / max(GCOLS, GROWS)
+
+        # ── Draw path on minimap ──────────────────────────────
+        wpath = self._get_cached_wpath()
+        if wpath and len(wpath) >= 2:
+            _path_col = self.algo_colors[self.current_algo]["path"]
+            pts = []
+            step = max(1, len(wpath) // 200)
+            for i in range(0, len(wpath), step):
+                wx, wy = wpath[i]
+                px = mx + int(wx / T * cs)
+                py = my + int(wy / T * cs)
+                pts.append((px, py))
+            # Add last point
+            wx, wy = wpath[-1]
+            last_pt = (mx + int(wx / T * cs), my + int(wy / T * cs))
+            if not pts or pts[-1] != last_pt:
+                pts.append(last_pt)
+            if len(pts) >= 2:
+                pygame.draw.lines(self.screen, _path_col, False, pts, 2)
+
+        # ── Draw origin marker ────────────────────────────────
+        if self.origin:
+            oc, or_ = self.origin
+            ox = mx + int((oc + 0.5) * cs)
+            oy = my + int((or_ + 0.5) * cs)
+            pygame.draw.circle(self.screen, C_ORIGIN, (ox, oy), 4)
+            pygame.draw.circle(self.screen, (255, 255, 255), (ox, oy), 4, 1)
+
+        # ── Draw dest marker ──────────────────────────────────
+        if self.dest:
+            dc, dr = self.dest
+            dx = mx + int((dc + 0.5) * cs)
+            dy = my + int((dr + 0.5) * cs)
+            pygame.draw.circle(self.screen, C_DEST, (dx, dy), 4)
+            pygame.draw.circle(self.screen, (255, 255, 255), (dx, dy), 4, 1)
+
+        # ── Draw car position ─────────────────────────────────
+        if self.car.active:
+            car_px = mx + int(self.car.x / T * cs)
+            car_py = my + int(self.car.y / T * cs)
+            pygame.draw.circle(self.screen, (255, 255, 0), (car_px, car_py), 3)
+
+        # ── Viewport rectangle ────────────────────────────────
+        x0, y0 = self.camera.screen_to_world(self.panel_w, 0)
+        x1, y1 = self.camera.screen_to_world(W, H)
+        rx = mx + int(x0 / T * cs)
+        ry = my + int(y0 / T * cs)
+        rw = max(2, int((x1 - x0) / T * cs))
+        rh = max(2, int((y1 - y0) / T * cs))
+        pygame.draw.rect(self.screen, (255, 255, 255), (rx, ry, rw, rh), 1)
+
+        # ── Border ────────────────────────────────────────────
+        pygame.draw.rect(self.screen, C_BTN_BD, (mx - 4, my - 4, mm_size + 8, mm_size + 8), 1)
+
+    def _handle_minimap_click(self, pos):
+        """Handle click on minimap: move camera to that world position."""
+        if not self._mm_rect or not self._mm_rect.collidepoint(pos):
+            return False
+        mm_size = self._mm_rect.width
+        cs = mm_size / max(GCOLS, GROWS)
+        # Convert click position to world coordinates
+        local_x = pos[0] - self._mm_rect.x
+        local_y = pos[1] - self._mm_rect.y
+        world_x = local_x / cs * T
+        world_y = local_y / cs * T
+        self.camera.center_on(world_x, world_y)
+        return True
 
     def _draw_marker(self, c, r, col, label):
         wx, wy = c * T + T // 2, r * T + T // 2
@@ -565,8 +727,8 @@ class ClearCityNav:
         # Fill with grass color
         surf.fill(C_GRASS)
         
-        C_ROAD_LOD0       = (55,  62,  85)
-        C_INTERSECT_LOD0  = (75,  85, 115)
+        C_ROAD_LOD0       = (58,  58,  62)
+        C_INTERSECT_LOD0  = (75,  75,  80)
         _BLDG_TYPES = (ENV_B0, ENV_B1, ENV_B2,
                        ENV_RUMAH, ENV_RUKO, ENV_MASJID,
                        ENV_SPBU, ENV_TAMAN)
@@ -610,7 +772,7 @@ class ClearCityNav:
                     ev = self.env[r][c] if self.env else ENV_NONE
                     if lod == 0:
                         if ev in _BLDG_TYPES:
-                            pygame.draw.rect(surf, (22, 28, 40), (tx, ty, isz, isz))
+                            pygame.draw.rect(surf, (140, 130, 115), (tx, ty, isz, isz))
                     elif lod == 1:
                         if ev != ENV_TREE:
                             scaled = self._get_scaled_env(ev, c, r, isz)
@@ -731,6 +893,7 @@ class ClearCityNav:
         self.car.draw(self.screen, self.camera)
 
         self._draw_panel(lod)
+        self._draw_minimap()
 
     def run(self):
         running = True
@@ -753,7 +916,10 @@ class ClearCityNav:
                     elif ev.key == pygame.K_UP:    self.car.speed = min(15.0, self.car.speed + 1.0)
                     elif ev.key == pygame.K_DOWN:  self.car.speed = max(1.0, self.car.speed - 1.0)
                 elif ev.type == pygame.MOUSEBUTTONDOWN:
-                    if ev.pos[0] <= self.panel_w:
+                    # Check minimap click first (it's on top)
+                    if ev.button == 1 and self._handle_minimap_click(ev.pos):
+                        self._mm_drag = True
+                    elif ev.pos[0] <= self.panel_w:
                         for b in self.buttons:   b.clicked(ev.pos)
                         for b in self.algo_btns: b.clicked(ev.pos)
                     else:
@@ -769,7 +935,9 @@ class ClearCityNav:
                     if ev.button == 2:
                         self.camera.drag = False
                     elif ev.button == 1:
-                        if self._click_start is not None:
+                        if self._mm_drag:
+                            self._mm_drag = False
+                        elif self._click_start is not None:
                             ddx = ev.pos[0] - self._click_start[0]
                             ddy = ev.pos[1] - self._click_start[1]
                             if abs(ddx) + abs(ddy) < 8:
@@ -777,7 +945,10 @@ class ClearCityNav:
                         self._click_start = None
                         self._last_drag   = None
                 elif ev.type == pygame.MOUSEMOTION:
-                    if ev.buttons[1]:
+                    # Minimap drag
+                    if self._mm_drag and ev.buttons[0]:
+                        self._handle_minimap_click(ev.pos)
+                    elif ev.buttons[1]:
                         if self.camera.drag_start:
                             dx = ev.pos[0] - self.camera.drag_start[0]
                             dy = ev.pos[1] - self.camera.drag_start[1]
@@ -794,8 +965,13 @@ class ClearCityNav:
                     else:
                         self._last_drag = None
                 elif ev.type == pygame.MOUSEWHEEL:
-                    factor = 1.15 if ev.y > 0 else 1 / 1.15
-                    self.camera.zoom_at(mx, my, factor)
+                    # Scroll panel if mouse is over it
+                    if mx <= self.panel_w and my >= self._panel_scroll_area_top:
+                        self.panel_scroll -= ev.y * 30
+                        self.panel_scroll = max(0, min(self.panel_scroll, self.panel_scroll_max))
+                    else:
+                        factor = 1.15 if ev.y > 0 else 1 / 1.15
+                        self.camera.zoom_at(mx, my, factor)
             self.car.update(dt)
             if self.car.arrived and self.btn_car.text != "Start Car":
                 self.btn_car.text = "Start Car"

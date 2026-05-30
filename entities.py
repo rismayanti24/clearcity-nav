@@ -164,15 +164,9 @@ class Car:
         else:
             self.active    = False
 
-    def update(self):
+    def update(self, dt):
         """
-        Update posisi mobil satu frame.
-
-        Logika:
-          1. Hitung vektor ke waypoint berikutnya
-          2. Jika jarak < speed → snap ke waypoint, lanjut ke berikutnya
-          3. Jika jarak >= speed → bergerak sejauh speed ke arah waypoint
-          4. Update angle dari arah gerakan
+        Update posisi mobil berdasarkan delta-time (dt) dan traversal multi-waypoint.
         """
         if not self.active or self.arrived or self.paused or not self.world_path:
             return
@@ -180,22 +174,31 @@ class Car:
             self.arrived = True
             return
 
-        tx, ty   = self.world_path[self.path_idx + 1]
-        dx, dy   = tx - self.x, ty - self.y
-        dist     = math.hypot(dx, dy)
+        # Kecepatan dalam piksel per detik (speed awal = 3.0 piksel per frame pada 60 FPS)
+        dist_to_move = self.speed * 60.0 * dt
 
-        if dist < self.speed:
-            # Sudah dekat → snap ke waypoint, maju ke berikutnya
-            self.x, self.y = tx, ty
-            self.path_idx  += 1
-            self.trail.append((self.x, self.y))
-        else:
-            # Bergerak menuju waypoint
-            ux, uy  = dx / dist, dy / dist
-            self.x += ux * self.speed
-            self.y += uy * self.speed
-            self.angle = math.atan2(dy, dx)
-            self.trail.append((self.x, self.y))
+        while dist_to_move > 0 and self.path_idx < len(self.world_path) - 1:
+            tx, ty   = self.world_path[self.path_idx + 1]
+            dx, dy   = tx - self.x, ty - self.y
+            dist     = math.hypot(dx, dy)
+
+            if dist <= dist_to_move:
+                # Snap ke waypoint ini
+                self.x, self.y = tx, ty
+                self.path_idx += 1
+                dist_to_move -= dist
+                self.trail.append((self.x, self.y))
+            else:
+                # Bergerak sebagian menuju waypoint
+                ux, uy = dx / dist, dy / dist
+                self.x += ux * dist_to_move
+                self.y += uy * dist_to_move
+                self.angle = math.atan2(dy, dx)
+                dist_to_move = 0
+                self.trail.append((self.x, self.y))
+
+        if self.path_idx >= len(self.world_path) - 1:
+            self.arrived = True
 
     def draw(self, surf, camera):
         """
