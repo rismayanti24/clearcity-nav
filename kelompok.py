@@ -69,13 +69,13 @@ class ClearCityNav:
     def __init__(self):
         pygame.init()
         self.screen  = pygame.display.set_mode((W, H))
-        pygame.display.set_caption("ClearCity Nav — Smart Car Simulator")
+        pygame.display.set_caption("Snake Growth Engine — Nav Simulator")
         self.clock   = pygame.time.Clock()
         self.font    = pygame.font.SysFont("consolas", 13)
         self.font_b  = pygame.font.SysFont("consolas", 15, bold=True)
         self.font_t  = pygame.font.SysFont("consolas", 20, bold=True)
 
-        self.panel_w = 200
+        self.panel_w = 220
         self.seed       = random.randint(0, 999999)
         self.grid       = None
         self.env        = None
@@ -138,14 +138,14 @@ class ClearCityNav:
 
         bx, bw, bh = 10, 180, 28
         by, gap    = 80, 34
-        self.btn_car = Button(bx, by, bw, bh, "Start Car", self._toggle_car)
+        self.btn_car = Button(bx, by, bw, bh, "Mulai Mobil", self._toggle_car)
         self.buttons = [
             self.btn_car,
-            Button(bx, by + gap,     bw, bh, "Random Path", self._random_path),
-            Button(bx, by + gap * 2, bw, bh, "New Map",     self._new_map),
-            Button(bx, by + gap * 3, bw, bh, "Clear All",   self._clear_all),
-            Button(bx, by + gap * 4, bw, bh, "Follow Car",  self._toggle_follow),
-            Button(bx, by + gap * 5, bw, bh, "Center View", self._center_view),
+            Button(bx, by + gap,     bw, bh, "Rute Acak",  self._random_path),
+            Button(bx, by + gap * 2, bw, bh, "Peta Baru",  self._new_map),
+            Button(bx, by + gap * 3, bw, bh, "Hapus Semua",self._clear_all),
+            Button(bx, by + gap * 4, bw, bh, "Ikuti Mobil", self._toggle_follow),
+            Button(bx, by + gap * 5, bw, bh, "Tengah Peta", self._center_view),
         ]
 
         abw, abh, aby = 57, 22, 282
@@ -158,26 +158,94 @@ class ClearCityNav:
 
         self._rebuild_map()
         
-      # Menampilkan layar loading saat proses generate map berlangsung
-    def _show_loading(self, msg="Generating map..."):
+    # ── Anggota kelompok (ubah sesuai nama tim) ──────────────────
+    _MEMBERS = [
+        "1. Nama Anggota 1",
+        "2. Nama Anggota 2",
+        "3. Nama Anggota 3",
+        "4. Nama Anggota 4",
+        "5. Nama Anggota 5",
+    ]
+
+    # Menampilkan layar loading saat proses generate map berlangsung
+    def _show_loading(self, msg="Memuat peta...", progress=0.0):
+        """
+        progress : float 0.0–1.0 untuk progress bar.
+        """
         self.screen.fill(C_BG)
-        t = self.font_b.render(msg, True, C_UI)
-        self.screen.blit(t, (W // 2 - t.get_width() // 2, H // 2 - 10))
+
+        cy = H // 2 - 90
+
+        # ── Garis dekorasi atas ───────────────────────────────
+        pygame.draw.line(self.screen, C_BTN_BD,
+                         (W // 2 - 320, cy - 18), (W // 2 + 320, cy - 18), 1)
+
+        # ── Judul aplikasi ────────────────────────────────────
+        title = self.font_t.render("Snake Growth Engine — Nav Simulator", True, C_BTN_BD)
+        self.screen.blit(title, (W // 2 - title.get_width() // 2, cy))
+        cy += title.get_height() + 8
+
+        # ── Garis dekorasi bawah judul ────────────────────────
+        pygame.draw.line(self.screen, C_BTN_BD,
+                         (W // 2 - 320, cy + 4), (W // 2 + 320, cy + 4), 1)
+        cy += 18
+
+        # ── Pesan loading ─────────────────────────────────────
+        lmsg = self.font_b.render(msg, True, C_UI)
+        self.screen.blit(lmsg, (W // 2 - lmsg.get_width() // 2, cy))
+        cy += lmsg.get_height() + 10
+
+        # ── Progress bar ──────────────────────────────────────
+        bar_w, bar_h = 500, 12
+        bar_x = W // 2 - bar_w // 2
+        # Background
+        pygame.draw.rect(self.screen, (30, 45, 60),
+                         (bar_x, cy, bar_w, bar_h), border_radius=6)
+        # Fill
+        fill_w = int(bar_w * max(0.0, min(1.0, progress)))
+        if fill_w > 0:
+            pygame.draw.rect(self.screen, C_BTN_BD,
+                             (bar_x, cy, fill_w, bar_h), border_radius=6)
+        # Border
+        pygame.draw.rect(self.screen, C_BTN_BD,
+                         (bar_x, cy, bar_w, bar_h), 1, border_radius=6)
+        # Persentase
+        pct = self.font.render(f"{int(progress * 100)}%", True, C_UIK)
+        self.screen.blit(pct, (W // 2 - pct.get_width() // 2, cy + bar_h + 4))
+        cy += bar_h + 24
+
+        # ── Anggota kelompok ──────────────────────────────────
+        pygame.draw.line(self.screen, (30, 50, 70),
+                         (W // 2 - 200, cy), (W // 2 + 200, cy), 1)
+        cy += 6
+        hdr = self.font.render("Anggota Kelompok", True, C_BTN_BD)
+        self.screen.blit(hdr, (W // 2 - hdr.get_width() // 2, cy))
+        cy += hdr.get_height() + 4
+        for name in self._MEMBERS:
+            nt = self.font.render(name, True, C_UIK)
+            self.screen.blit(nt, (W // 2 - nt.get_width() // 2, cy))
+            cy += nt.get_height() + 2
+
         pygame.display.flip()
 
     def _rebuild_map(self):
         t0 = time.time()
-        self._show_loading("Generating road network...")
+        self._show_loading("Membangun jaringan jalan kota...", progress=0.05)
         self.grid = generate_map(GCOLS, GROWS, self.seed)
         t1 = time.time()
-        self._show_loading(f"Road network done ({t1-t0:.1f}s). Generating environment...")
+        self._show_loading(
+            f"Jaringan jalan selesai ({t1-t0:.1f}s) — Memuat lingkungan kota...",
+            progress=0.50)
         self.env = generate_environment(self.grid, self.seed)
         t2 = time.time()
-        self._show_loading(f"Environment done ({t2-t1:.1f}s). Building caches...")
+        self._show_loading(
+            f"Lingkungan selesai ({t2-t1:.1f}s) — Membangun cache render...",
+            progress=0.85)
         self.tile_cache.build()
         self.env_cache.build()
         self.minimap_surf = build_minimap(self.grid)
         t3 = time.time()
+        self._show_loading("Peta siap! Memulai simulasi...", progress=1.0)
         print(f"Map generated in {t3-t0:.2f}s (road={t1-t0:.2f}s env={t2-t1:.2f}s cache={t3-t2:.2f}s)")
         self.origin = None
         self.dest   = None
@@ -185,7 +253,7 @@ class ClearCityNav:
         self.explored = set()
         self.blocked  = set()
         self.car      = Car()
-        self.btn_car.text = "Start Car"
+        self.btn_car.text = "Mulai Mobil"
         self.algo_stats = {
             "astar":    {"nodes": 0, "ms": 0.0, "path_len": 0},
             "dijkstra": {"nodes": 0, "ms": 0.0, "path_len": 0},
@@ -202,11 +270,11 @@ class ClearCityNav:
     def _toggle_car(self):
         if self.car.active and not self.car.arrived:
             self.car.paused   = not self.car.paused
-            self.btn_car.text = "Resume Car" if self.car.paused else "Pause Car"
+            self.btn_car.text = "Lanjut Mobil" if self.car.paused else "Jeda Mobil"
         elif self.path and len(self.path) >= 2:
             wpath = build_world_path(self.grid, self.path)
             self.car.set_path(wpath)
-            self.btn_car.text = "Pause Car"
+            self.btn_car.text = "Jeda Mobil"
 
     def _random_path(self):
         roads = _all_road_cells(self.grid)
@@ -230,7 +298,7 @@ class ClearCityNav:
         self.explored     = set()
         self.blocked      = set()
         self.car          = Car()
-        self.btn_car.text = "Start Car"
+        self.btn_car.text = "Mulai Mobil"
         self.placing_mode = "origin"
         self.algo_stats   = {
             "astar":    {"nodes": 0, "ms": 0.0, "path_len": 0},
@@ -315,7 +383,7 @@ class ClearCityNav:
             # Tidak ada tile valid di sekitar mobil → berhenti
             self.car.active   = False
             self.car.arrived  = False
-            self.btn_car.text = "Start Car"
+            self.btn_car.text = "Mulai Mobil"
             return
 
         # ── Pathfind dari tile terdekat ke destination ────────
@@ -338,15 +406,15 @@ class ClearCityNav:
 
             if was_paused:
                 self.car.paused   = True
-                self.btn_car.text = "Resume Car"
+                self.btn_car.text = "Lanjut Mobil"
             else:
                 self.car.paused   = False
-                self.btn_car.text = "Pause Car"
+                self.btn_car.text = "Jeda Mobil"
         else:
             # Tidak ada jalur alternatif → berhentikan mobil
             self.car.active   = False
             self.car.arrived  = False
-            self.btn_car.text = "Start Car"
+            self.btn_car.text = "Mulai Mobil"
 
     def _handle_map_click(self, pos, button):
         wx, wy = self.camera.screen_to_world(pos[0], pos[1])
@@ -403,11 +471,20 @@ class ClearCityNav:
         pygame.draw.line(self.screen, C_BTN_BD, (self.panel_w, 0), (self.panel_w, H), 1)
 
         # ── Header ────────────────────────────────────────────
-        t = self.font_t.render("NAV SIM", True, C_UI)
-        self.screen.blit(t, (self.panel_w // 2 - t.get_width() // 2, 12))
-        pygame.draw.line(self.screen, C_BTN_BD, (10, 42), (self.panel_w - 10, 42), 1)
-        st = self.font.render("Snake Growth Engine", True, C_UIK)
-        self.screen.blit(st, (self.panel_w // 2 - st.get_width() // 2, 50))
+        # Latar header
+        hdr_bg = pygame.Surface((self.panel_w, 62), pygame.SRCALPHA)
+        hdr_bg.fill((0, 40, 70, 180))
+        self.screen.blit(hdr_bg, (0, 0))
+        # Garis aksen atas
+        pygame.draw.line(self.screen, C_BTN_BD, (0, 0), (self.panel_w, 0), 2)
+        # Judul utama
+        t = self.font_t.render("NAV SIM", True, C_BTN_BD)
+        self.screen.blit(t, (self.panel_w // 2 - t.get_width() // 2, 6))
+        # Subjudul
+        st = self.font.render("Snake Growth Engine", True, C_UI)
+        self.screen.blit(st, (self.panel_w // 2 - st.get_width() // 2, 30))
+        # Garis bawah header
+        pygame.draw.line(self.screen, C_BTN_BD, (5, 46), (self.panel_w - 5, 46), 1)
 
         # ── Buttons ───────────────────────────────────────────
         for b in self.buttons:
@@ -443,34 +520,36 @@ class ClearCityNav:
         # ── Build content list for scrollable area ────────────
         # Each item: ("section", title) or ("row", key, val, color)
         items = []
-        items.append(("section", "MAP STATS"))
+        items.append(("section", "STATISTIK PETA"))
         items.append(("row", "Seed",   str(self.seed), C_UI))
-        items.append(("row", "Roads",  str(total_road), C_UI))
-        items.append(("row", "Str",    f"{str_count} ({str_pct:.1f}%)", str_col))
+        items.append(("row", "Jalan",  str(total_road), C_UI))
+        items.append(("row", "Lurus",    f"{str_count} ({str_pct:.1f}%)", str_col))
         items.append(("row", "Diag",   str(self.tile_counts.get(DIAGONAL, 0)), C_UI))
-        items.append(("row", "Curve",  str(self.tile_counts.get(CURVE, 0)), C_UI))
-        items.append(("row", "T-jnc",  str(self.tile_counts.get(TJUNCTION, 0)), C_UI))
-        items.append(("row", "Cross",  str(self.tile_counts.get(CROSS, 0)), C_UI))
+        items.append(("row", "Tikungan",  str(self.tile_counts.get(CURVE, 0)), C_UI))
+        items.append(("row", "Pertigaan",  str(self.tile_counts.get(TJUNCTION, 0)), C_UI))
+        items.append(("row", "Persimpangan",  str(self.tile_counts.get(CROSS, 0)), C_UI))
         items.append(("gap",))
         items.append(("section", "PATHFINDING"))
         items.append(("row", "Mode",     self.placing_mode.upper(), C_UI))
-        items.append(("row", "Blocks",   str(len(self.blocked)), C_UI))
-        items.append(("row", "Nodes",    str(self.astar_nodes), C_UI))
-        items.append(("row", "Time ms",  f"{self.astar_time:.2f}", C_UI))
-        items.append(("row", "Path",     str(len(self.path)) if self.path else "\u2014", C_UI))
+        items.append(("row", "Blokir",   str(len(self.blocked)), C_UI))
+        items.append(("row", "Node",    str(self.astar_nodes), C_UI))
+        items.append(("row", "Waktu ms",  f"{self.astar_time:.2f}", C_UI))
+        items.append(("row", "Jalur",     str(len(self.path)) if self.path else "\u2014", C_UI))
         items.append(("row", "Time O",   time_o, C_BIGOH))
         items.append(("row", "Space O",  space_o, C_BIGOH))
         items.append(("gap",))
-        items.append(("section", "CAR & VIEW"))
-        items.append(("row", "Car",    car_status, C_UI))
-        items.append(("row", "Follow", "ON" if self.follow_car else "OFF", C_UI))
-        items.append(("row", "Speed",  f"{self.car.speed:.1f} px/f", C_UI))
-        items.append(("row", "LOD",    ["FAR", "MED", "CLOSE"][lod], C_UI))
+        items.append(("section", "MOBIL & TAMPILAN"))
+        items.append(("row", "Mobil",    car_status, C_UI))
+        items.append(("row", "Ikuti", "YA" if self.follow_car else "TIDAK", C_UI))
+        items.append(("row", "Kecepatan",  f"{self.car.speed:.1f} px/f", C_UI))
+        items.append(("row", "LOD",    ["JAUH", "SEDANG", "DEKAT"][lod], C_UI))
         items.append(("row", "Zoom",   f"{self.camera.zoom:.2f}", C_UI))
         items.append(("row", "FPS",    str(int(self.clock.get_fps())), C_UI))
         items.append(("gap",))
-        items.append(("section", "ALGO COMPARISON"))
+        items.append(("section", "PERBANDINGAN ALGO"))
         _algo_labels = [("A*", "astar"), ("Dijk", "dijkstra"), ("BFS", "bfs")]
+        # Cari nilai max node untuk normalisasi bar
+        _max_nodes = max((self.algo_stats[k]["nodes"] for _, k in _algo_labels), default=1) or 1
         for label, key in _algo_labels:
             s      = self.algo_stats[key]
             is_sel = (key == self.current_algo)
@@ -481,17 +560,9 @@ class ClearCityNav:
             ms_s     = f"{s['ms']:.1f}" if s["nodes"] else "-"
             row_txt  = f"{prefix}{label:<5} {nodes_s:>5}n {ms_s:>7}ms"
             items.append(("algo", row_txt, col))
+            # Mini bar proporsi node
+            items.append(("algobar", s["nodes"], _max_nodes, algo_col, is_sel))
         items.append(("gap",))
-        items.append(("section", "CONTROLS"))
-        ctrl_lines = [
-            "L-click: Set origin/dest",
-            "R-click: Toggle block",
-            "Scroll:  Zoom in/out",
-            "Up/Down: Car speed",
-            "Drag:    Pan camera",
-        ]
-        for line in ctrl_lines:
-            items.append(("ctrl", line))
 
         # ── Measure total content height ──────────────────────
         total_h = 0
@@ -502,6 +573,8 @@ class ClearCityNav:
                 total_h += 14
             elif item[0] == "algo":
                 total_h += 14
+            elif item[0] == "algobar":
+                total_h += 16
             elif item[0] == "ctrl":
                 total_h += 14
             elif item[0] == "gap":
@@ -509,8 +582,16 @@ class ClearCityNav:
         self._panel_content_h = total_h
 
         # ── Scrollable area dimensions ────────────────────────
+        ctrl_lines = [
+            "[L-Klik] Set asal/tujuan",
+            "[R-Klik] Toggle blokir",
+            "[Scroll] Zoom in/out",
+            "[↑/↓]   Kecepatan mobil",
+            "[Drag]  Geser kamera",
+        ]
+        footer_h   = 17 + len(ctrl_lines) * 13 + 6  # section + lines + padding
         scroll_top = self._panel_scroll_area_top
-        scroll_bot = H  # bottom of panel
+        scroll_bot = H - footer_h                    # sisakan ruang untuk footer
         visible_h  = scroll_bot - scroll_top
         self.panel_scroll_max = max(0, total_h - visible_h)
         self.panel_scroll = max(0, min(self.panel_scroll, self.panel_scroll_max))
@@ -543,6 +624,35 @@ class ClearCityNav:
                     rt = self.font.render(row_txt, True, col)
                     self.screen.blit(rt, (8, sy))
                 sy += 14
+            elif item[0] == "algobar":
+                _, nodes, max_n, col, is_sel = item
+                if sy + 16 > scroll_top - 20 and sy < scroll_bot + 20:
+                    pct_val = int(nodes / max_n * 100) if max_n else 0
+                    pct_txt = self.font.render(f"{pct_val}%", True,
+                                               col if is_sel else tuple(c // 2 for c in col))
+                    pct_w   = pct_txt.get_width()
+                    bar_x   = 14
+                    bar_total = self.panel_w - bar_x - pct_w - 8
+                    fill    = int(bar_total * nodes / max_n) if max_n else 0
+                    bar_h   = 9
+                    # Background bar
+                    pygame.draw.rect(self.screen, (18, 28, 40),
+                                     (bar_x, sy + 2, bar_total, bar_h), border_radius=4)
+                    # Fill bar
+                    if fill > 0:
+                        pygame.draw.rect(self.screen, col,
+                                         (bar_x, sy + 2, fill, bar_h), border_radius=4)
+                        # Highlight strip
+                        hi_col = tuple(min(255, c + 80) for c in col)
+                        pygame.draw.rect(self.screen, hi_col,
+                                         (bar_x, sy + 2, fill, 3), border_radius=4)
+                    # Border
+                    bd_col = col if is_sel else tuple(c // 3 for c in col)
+                    pygame.draw.rect(self.screen, bd_col,
+                                     (bar_x, sy + 2, bar_total, bar_h), 1, border_radius=4)
+                    # Label % di kanan bar dengan jarak aman
+                    self.screen.blit(pct_txt, (bar_x + bar_total + 4, sy + 1))
+                sy += 16
             elif item[0] == "ctrl":
                 _, line = item
                 if sy + 14 > scroll_top - 20 and sy < scroll_bot + 20:
@@ -560,6 +670,24 @@ class ClearCityNav:
             bar_y  = scroll_top + int((visible_h - bar_h) * self.panel_scroll / self.panel_scroll_max)
             bar_r  = pygame.Rect(self.panel_w - 4, bar_y, 3, bar_h)
             pygame.draw.rect(self.screen, (80, 100, 130, 150), bar_r, border_radius=1)
+
+        # ── Footer tetap: KONTROL (selalu tampil di bawah panel) ─
+        fy = H - footer_h
+        # Background footer
+        foot_bg = pygame.Surface((self.panel_w, footer_h), pygame.SRCALPHA)
+        foot_bg.fill((15, 22, 32, 240))
+        self.screen.blit(foot_bg, (0, fy))
+        # Garis pemisah atas footer
+        pygame.draw.line(self.screen, C_BTN_BD, (5, fy), (self.panel_w - 5, fy), 1)
+        fy += 3
+        # Header KONTROL
+        hdr = self.font.render("KONTROL", True, C_BTN_BD)
+        self.screen.blit(hdr, (self.panel_w // 2 - hdr.get_width() // 2, fy))
+        fy += 14
+        for line in ctrl_lines:
+            ct = self.font.render(line, True, (80, 100, 125))
+            self.screen.blit(ct, (10, fy))
+            fy += 13
 
     def _draw_minimap(self):
         """Draw interactive minimap at the bottom-right corner of the screen."""
@@ -973,8 +1101,8 @@ class ClearCityNav:
                         factor = 1.15 if ev.y > 0 else 1 / 1.15
                         self.camera.zoom_at(mx, my, factor)
             self.car.update(dt)
-            if self.car.arrived and self.btn_car.text != "Start Car":
-                self.btn_car.text = "Start Car"
+            if self.car.arrived and self.btn_car.text != "Mulai Mobil":
+                self.btn_car.text = "Mulai Mobil"
             if self.follow_car and self.car.active and not self.car.paused:
                 self.camera.center_on(self.car.x, self.car.y)
             self.draw()
