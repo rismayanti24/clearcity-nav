@@ -11,8 +11,10 @@ Struktur modul:
   pathfinding.py  → A*, Dijkstra, BFS, Catmull-Rom
   rendering.py    → Render tile, bangunan, pohon, minimap
   entities.py     → Camera, Car, Button
-  main.py     → ClearCityNav (main app) + entry point
+  kelompok.py     → ClearCityNav (main app) + entry point
 
+Cara menjalankan:
+  python kelompok.py
 """
 
 import random
