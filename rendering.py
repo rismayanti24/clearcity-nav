@@ -1,4 +1,153 @@
+"""
+rendering.py
+============
+Modul rendering visual: tile jalan, bangunan, pohon, dan minimap.
 
+Tile jalan mengikuti style dari referensi "assets ref.py":
+  - STRAIGHT: rectangle sederhana (sidewalk + road + dashline)
+  - CURVE/T-JUNCTION/CROSS: Bézier kuadratik band
+
+ZOOM-AWARE RENDERING:
+  Semua tile draw function menerima parameter `sz` (ukuran piksel).
+  TileCache menggunakan lazy caching per ukuran display yang
+  dikuantisasi → Bézier selalu tajam di semua zoom level.
+
+Kelas:
+  TileCache  - Lazy zoom cache: render tile di resolusi display aktual
+  EnvCache   - Pre-render environment (pohon, bangunan, trotoar)
+
+Fungsi publik:
+  build_minimap(grid, size)
+"""
+
+import math
+import random
+
+import pygame
+
+from config import (
+    T, RW, SW, MG,
+    DASH_ON, DASH_OFF,
+    C_GRASS, C_SW, C_ROAD, C_DASH, C_BTN_BD,
+    BLDG_STYLES
+)
+from grid import (
+    STRAIGHT, CURVE, DIAGONAL, TJUNCTION, CROSS, EMPTY,
+    TILE_PORTS, get_ports
+)
+from mapgen import (ENV_NONE, ENV_SW, ENV_TREE, ENV_B0, ENV_B1, ENV_B2,
+                     ENV_RUMAH, ENV_RUKO, ENV_MASJID, ENV_SPBU, ENV_TAMAN)
+
+
+# ══════════════════════════════════════════════════════════════
+# BÉZIER & POLYLINE HELPERS
+# ══════════════════════════════════════════════════════════════
+def _bquad(p0, p1, p2, s=24):
+    """Bézier Kuadratik: B(t) = (1-t)²·P0 + 2(1-t)t·P1 + t²·P2"""
+    pts = []
+    for i in range(s + 1):
+        t = i / s
+        u = 1 - t
+        pts.append((u*u*p0[0] + 2*u*t*p1[0] + t*t*p2[0],
+                     u*u*p0[1] + 2*u*t*p1[1] + t*t*p2[1]))
+    return pts
+
+
+def _offcurve(pts, off, side="left"):
+    """Offset polyline secara perpendikular sejauh 'off' piksel."""
+    r = []
+    n = len(pts)
+    for i in range(n):
+        if i == 0:
+            dx, dy = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
+        elif i == n - 1:
+            dx, dy = pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1]
+        else:
+            dx, dy = pts[i+1][0] - pts[i-1][0], pts[i+1][1] - pts[i-1][1]
+        l = math.hypot(dx, dy) or 1
+        nx, ny = -dy / l, dx / l
+        if side == "right":
+            nx, ny = -nx, -ny
+        r.append((pts[i][0] + nx * off, pts[i][1] + ny * off))
+    return r
+
+
+def _fband(s, cp, hw, col):
+    """Gambar polygon band di sekitar kurva cp dengan half-width hw."""
+    if len(cp) < 2:
+        return
+    L = _offcurve(cp, hw, "left")
+    R = _offcurve(cp, hw, "right")
+    p = L + list(reversed(R))
+    if len(p) >= 3:
+        pygame.draw.polygon(s, col, [(int(a), int(b)) for a, b in p])
+
+
+def _dashline(s, x1, y1, x2, y2, vert=True, da=DASH_ON, ga=DASH_OFF):
+    """Garis putus-putus LURUS (dari referensi)."""
+    ln = (y2 - y1) if vert else (x2 - x1)
+    pos = 0
+    dr = True
+    while pos < ln:
+        sg = min(da if dr else ga, ln - pos)
+        if dr:
+            if vert:
+                pygame.draw.line(s, C_DASH, (x1, y1 + pos), (x1, y1 + pos + sg), 1)
+            else:
+                pygame.draw.line(s, C_DASH, (x1 + pos, y1), (x1 + pos + sg, y1), 1)
+        pos += sg
+        dr = not dr
+
+
+def _bdash(s, pts, col, da=DASH_ON, ga=DASH_OFF):
+    """Garis putus-putus mengikuti kurva Bézier (dari referensi)."""
+    acc = 0
+    dr = True
+    for i in range(len(pts) - 1):
+        ax, ay = pts[i]
+        bx, by = pts[i + 1]
+        sg = math.hypot(bx - ax, by - ay)
+        if sg < .001:
+            continue
+        dx, dy = (bx - ax) / sg, (by - ay) / sg
+        t = 0
+        while t < sg:
+            p = da if dr else ga
+            rm = min(p - acc, sg - t)
+            if dr:
+                sx2, sy2 = ax + dx * t, ay + dy * t
+                ex2, ey2 = ax + dx * (t + rm), ay + dy * (t + rm)
+                pygame.draw.line(s, col, (int(sx2), int(sy2)), (int(ex2), int(ey2)), 1)
+            t += rm
+            acc += rm
+            if acc >= p:
+                acc = 0
+                dr = not dr
+
+
+def _pmids(x, y, sz):
+    """Midpoint keempat sisi tile berukuran sz piksel."""
+    return {
+        0: (x + sz // 2, y),
+        1: (x + sz,      y + sz // 2),
+        2: (x + sz // 2, y + sz),
+        3: (x,           y + sz // 2),
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# TILE DRAW — zoom-aware (semua terima parameter sz)
+# ══════════════════════════════════════════════════════════════
+def _dsw(s, x, y, tt, rot, sz):
+    """Gambar trotoar pada sisi tile yang tidak punya port. Ukuran tile = sz."""
+    sf    = sz / T
+    mg    = max(1, int(MG * sf))
+    ports = get_ports(tt, rot)
+    closed = {0, 1, 2, 3} - ports
+    for d in closed:
+        if d == 0:
+            pygame.draw.rect(s, C_SW, (x, y, sz, mg))
+        elif d == 2:
             pygame.draw.rect(s, C_SW, (x, y + sz - mg, sz, mg))
         elif d == 3:
             pygame.draw.rect(s, C_SW, (x, y, mg, sz))
