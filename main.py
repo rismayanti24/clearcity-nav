@@ -1,5 +1,5 @@
 """
-kelompok.py
+main.py
 ===========
 Entry point utama simulasi navigasi kota.
 Berisi kelas ClearCityNav (controller/aplikasi) dan main game loop.

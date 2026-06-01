@@ -97,4 +97,3 @@ C_PATH_OUTLINE_DIJKSTRA = (130, 20,  20)
 C_PATH_BFS         = (230, 40,  60)
 C_EXPL_BFS         = (95,  15,  25)
 C_PATH_OUTLINE_BFS = (140, 20,  35)
-
