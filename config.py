@@ -29,7 +29,7 @@ C_GRASS    = (52, 120,  52)    # Warna rumput — hijau cerah realistis
 C_SW       = (58, 105,  50)    # Warna trotoar — hijau sedikit lebih gelap (rumput rapi)
 C_ROAD     = (58,  58,  62)    # Warna badan jalan — aspal abu gelap
 C_DASH     = (220, 210, 170)   # Warna garis putus-putus — kuning pucat
-C_PATH     = (0,   210, 110)   # Warna overlay jalur hasil pathfinding
+C_PATH     = (255, 60,  50)    # Warna overlay jalur hasil pathfinding (merah)
 C_EXPLORED = (40,  80,  140)   # Warna overlay node yang dijelajahi algoritma
 C_ORIGIN   = (0,   220, 80)    # Warna marker titik asal / origin
 C_DEST     = (220, 50,  50)    # Warna marker titik tujuan / destination
@@ -82,19 +82,19 @@ BLDG_STYLES = [
 LOD_FAR_ZOOM = 0.20   # zoom < ini -> LOD 0 (jauh: blok warna saja)
 LOD_MED_ZOOM = 0.55   # zoom < ini -> LOD 1 (sedang: bangunan, jalan, lampu), >= ini -> LOD 2 (dekat)
 
-# Warna pathfinding dan node eksplorasi per algoritma
-# A* (cyberpunk neon green/teal)
-C_PATH_ASTAR         = (0,   255, 120)
-C_EXPL_ASTAR         = (0,   70,  45)
-C_PATH_OUTLINE_ASTAR = (0,   100, 50)
+# Warna pathfinding dan node eksplorasi per algoritma (MERAH)
+# A* (merah cerah / bright red)
+C_PATH_ASTAR         = (255, 50,  40)
+C_EXPL_ASTAR         = (100, 20,  15)
+C_PATH_OUTLINE_ASTAR = (150, 25,  20)
 
-# Dijkstra (neon cyan/blue)
-C_PATH_DIJKSTRA         = (0,   220, 255)
-C_EXPL_DIJKSTRA         = (0,   50,  80)
-C_PATH_OUTLINE_DIJKSTRA = (0,   80,  120)
+# Dijkstra (crimson / merah gelap)
+C_PATH_DIJKSTRA         = (220, 30,  30)
+C_EXPL_DIJKSTRA         = (90,  15,  15)
+C_PATH_OUTLINE_DIJKSTRA = (130, 20,  20)
 
-# BFS (neon pink/purple)
-C_PATH_BFS         = (240, 0,   255)
-C_EXPL_BFS         = (80,  0,   80)
-C_PATH_OUTLINE_BFS = (120, 0,   120)
+# BFS (dark rose / merah keunguan)
+C_PATH_BFS         = (230, 40,  60)
+C_EXPL_BFS         = (95,  15,  25)
+C_PATH_OUTLINE_BFS = (140, 20,  35)
 

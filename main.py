@@ -13,7 +13,7 @@ Struktur modul:
   entities.py     → Camera, Car, Button
   main.py     → ClearCityNav (main app) + entry point
 
-
+"""
 import random
 import time
 import sys

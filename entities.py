@@ -202,56 +202,216 @@ class Car:
 
     def draw(self, surf, camera):
         """
-        Render mobil ke surface layar.
+        Render mobil ke surface layar — GoCar 3D style.
 
         Elemen yang digambar:
-          1. Trail: polyline pudar (semakin tua semakin transparan)
-          2. Bodi mobil: quadrilateral (trapesoid) yang dirotasi sesuai angle
-          3. Headlight: lingkaran kecil putih di depan mobil
+          1. Trail: polyline merah pudar
+          2. Shadow: bayangan di bawah mobil
+          3. Bodi: multi-layer polygon (badan bawah, badan atas, kap mesin)
+          4. Kaca depan & samping (windshield & side windows)
+          5. Atap dengan highlight
+          6. Roda (4 buah) dengan rim
+          7. Headlight ganda dengan efek glow
+          8. Tail light merah di belakang
         """
         if not self.active:
             return
 
-        # ── Trail ─────────────────────────────────────────────
+        # ── Trail (merah) ─────────────────────────────────────
         if len(self.trail) > 1:
             pts = []
             for wx, wy in self.trail:
                 sx, sy = camera.world_to_screen(wx, wy)
                 pts.append((int(sx), int(sy)))
             if len(pts) >= 2:
+                trail_w = max(1, int(2 * camera.zoom))
                 for i in range(len(pts) - 1):
-                    pygame.draw.line(
-                        surf, (0, 200, 100),
-                        pts[i], pts[i + 1],
-                        max(1, int(2 * camera.zoom))
-                    )
+                    alpha = int(80 + 120 * i / len(pts))
+                    trail_col = (min(255, alpha + 60), 30, 25)
+                    pygame.draw.line(surf, trail_col, pts[i], pts[i + 1], trail_w)
 
-        # ── Bodi mobil ────────────────────────────────────────
-        sx, sy  = camera.world_to_screen(self.x, self.y)
-        sz       = max(6, int(14 * camera.zoom))
-        cos_a    = math.cos(self.angle)
-        sin_a    = math.sin(self.angle)
+        # ── Ukuran dan rotasi ─────────────────────────────────
+        sx, sy = camera.world_to_screen(self.x, self.y)
+        sz     = max(6, int(14 * camera.zoom))
+        cos_a  = math.cos(self.angle)
+        sin_a  = math.sin(self.angle)
 
-        # 4 titik sudut bodi (trapesoid yang menunjuk ke depan)
-        bpts = [
-            (sx + cos_a * sz       - sin_a * sz * 0.5,
-             sy + sin_a * sz       + cos_a  * sz * 0.5),   # depan-kiri
-            (sx + cos_a * sz       + sin_a * sz * 0.5,
-             sy + sin_a * sz       - cos_a  * sz * 0.5),   # depan-kanan
-            (sx - cos_a * sz * 0.7 + sin_a * sz * 0.5,
-             sy - sin_a * sz * 0.7 - cos_a  * sz * 0.5),   # belakang-kanan
-            (sx - cos_a * sz * 0.7 - sin_a * sz * 0.5,
-             sy - sin_a * sz * 0.7 + cos_a  * sz * 0.5),   # belakang-kiri
+        def _rot(dx, dy):
+            """Rotate offset (dx,dy) by car angle and add to screen pos."""
+            return (sx + cos_a * dx - sin_a * dy,
+                    sy + sin_a * dx + cos_a * dy)
+
+        def _irot(dx, dy):
+            p = _rot(dx, dy)
+            return (int(p[0]), int(p[1]))
+
+        # Faktor skala relatif terhadap sz
+        s = sz  # unit scale
+
+        # ── 1. Shadow (bayangan) ──────────────────────────────
+        sh_off = max(1, int(s * 0.12))
+        shadow_pts = [
+            (sx + sh_off + cos_a * s * 1.1  - sin_a * s * 0.48,
+             sy + sh_off + sin_a * s * 1.1  + cos_a * s * 0.48),
+            (sx + sh_off + cos_a * s * 1.1  + sin_a * s * 0.48,
+             sy + sh_off + sin_a * s * 1.1  - cos_a * s * 0.48),
+            (sx + sh_off - cos_a * s * 0.85 + sin_a * s * 0.48,
+             sy + sh_off - sin_a * s * 0.85 - cos_a * s * 0.48),
+            (sx + sh_off - cos_a * s * 0.85 - sin_a * s * 0.48,
+             sy + sh_off - sin_a * s * 0.85 + cos_a * s * 0.48),
         ]
-        pygame.draw.polygon(surf, (0, 220, 255), [(int(x), int(y)) for x, y in bpts])
-        pygame.draw.polygon(surf, (0, 255, 255), [(int(x), int(y)) for x, y in bpts], 1)
+        shadow_surf = pygame.Surface((int(s * 3), int(s * 3)), pygame.SRCALPHA)
+        sh_pts_local = [(int(p[0] - sx + s * 1.5), int(p[1] - sy + s * 1.5)) for p in shadow_pts]
+        if len(sh_pts_local) >= 3:
+            pygame.draw.polygon(shadow_surf, (0, 0, 0, 55), sh_pts_local)
+        surf.blit(shadow_surf, (int(sx - s * 1.5), int(sy - s * 1.5)))
 
-        # ── Headlight ─────────────────────────────────────────
-        hx = sx + cos_a * sz * 1.1
-        hy = sy + sin_a * sz * 1.1
-        pygame.draw.circle(surf, (255, 255, 200),
-                           (int(hx), int(hy)),
-                           max(2, int(3 * camera.zoom)))
+        # ── 2. Bodi bawah (chassis — hijau GoCar gelap) ───────
+        body_col    = (30, 160, 60)    # hijau GoCar
+        body_hi     = (45, 190, 80)    # hijau lebih terang (highlight)
+        body_dk     = (20, 120, 40)    # hijau gelap (shadow side)
+        accent_col  = (255, 255, 255)  # aksen putih
+
+        # Bodi utama (persegi panjang rounded-look)
+        body_pts = [
+            _irot(s * 1.05, -s * 0.45),   # depan-kanan
+            _irot(s * 1.05,  s * 0.45),    # depan-kiri
+            _irot(-s * 0.8,  s * 0.45),    # belakang-kiri
+            _irot(-s * 0.8, -s * 0.45),    # belakang-kanan
+        ]
+        pygame.draw.polygon(surf, body_col, body_pts)
+
+        # Panel samping kanan (gelap → efek 3D)
+        side_r = [
+            _irot(s * 0.95, -s * 0.46),
+            _irot(s * 0.95, -s * 0.38),
+            _irot(-s * 0.7, -s * 0.38),
+            _irot(-s * 0.7, -s * 0.46),
+        ]
+        pygame.draw.polygon(surf, body_dk, side_r)
+
+        # Panel samping kiri (terang → efek 3D)
+        side_l = [
+            _irot(s * 0.95, s * 0.46),
+            _irot(s * 0.95, s * 0.38),
+            _irot(-s * 0.7, s * 0.38),
+            _irot(-s * 0.7, s * 0.46),
+        ]
+        pygame.draw.polygon(surf, body_hi, side_l)
+
+        # ── 3. Kap mesin (hood) — hijau lebih cerah ──────────
+        hood_pts = [
+            _irot(s * 1.02, -s * 0.35),
+            _irot(s * 1.02,  s * 0.35),
+            _irot(s * 0.45,  s * 0.35),
+            _irot(s * 0.45, -s * 0.35),
+        ]
+        pygame.draw.polygon(surf, (40, 180, 70), hood_pts)
+        # Garis aksen di kap mesin
+        pygame.draw.line(surf, (55, 200, 90),
+                         _irot(s * 0.95, 0), _irot(s * 0.5, 0),
+                         max(1, int(s * 0.06)))
+
+        # ── 4. Kaca depan (windshield) ────────────────────────
+        ws_pts = [
+            _irot(s * 0.45, -s * 0.32),
+            _irot(s * 0.45,  s * 0.32),
+            _irot(s * 0.2,   s * 0.28),
+            _irot(s * 0.2,  -s * 0.28),
+        ]
+        pygame.draw.polygon(surf, (140, 200, 235), ws_pts)
+        pygame.draw.polygon(surf, (80, 140, 180), ws_pts, max(1, int(s * 0.04)))
+
+        # ── 5. Atap (roof) ───────────────────────────────────
+        roof_pts = [
+            _irot(s * 0.2,  -s * 0.3),
+            _irot(s * 0.2,   s * 0.3),
+            _irot(-s * 0.35, s * 0.3),
+            _irot(-s * 0.35,-s * 0.3),
+        ]
+        pygame.draw.polygon(surf, (25, 140, 55), roof_pts)
+        # Highlight strip di atap
+        roof_hi = [
+            _irot(s * 0.15, -s * 0.15),
+            _irot(s * 0.15,  s * 0.15),
+            _irot(-s * 0.2,  s * 0.15),
+            _irot(-s * 0.2, -s * 0.15),
+        ]
+        pygame.draw.polygon(surf, (50, 175, 80), roof_hi)
+
+        # ── 6. Kaca belakang ─────────────────────────────────
+        rw_pts = [
+            _irot(-s * 0.35, -s * 0.26),
+            _irot(-s * 0.35,  s * 0.26),
+            _irot(-s * 0.5,   s * 0.28),
+            _irot(-s * 0.5,  -s * 0.28),
+        ]
+        pygame.draw.polygon(surf, (120, 180, 210), rw_pts)
+        pygame.draw.polygon(surf, (70, 120, 160), rw_pts, max(1, int(s * 0.04)))
+
+        # ── 7. Bagasi belakang ───────────────────────────────
+        trunk_pts = [
+            _irot(-s * 0.5,  -s * 0.35),
+            _irot(-s * 0.5,   s * 0.35),
+            _irot(-s * 0.75,  s * 0.35),
+            _irot(-s * 0.75, -s * 0.35),
+        ]
+        pygame.draw.polygon(surf, (28, 145, 55), trunk_pts)
+
+        # ── 8. Roda (4 buah) ─────────────────────────────────
+        wheel_w = max(2, int(s * 0.18))
+        wheel_h = max(1, int(s * 0.12))
+        wheel_positions = [
+            (s * 0.65, -s * 0.48),   # depan-kanan
+            (s * 0.65,  s * 0.48),   # depan-kiri
+            (-s * 0.5, -s * 0.48),   # belakang-kanan
+            (-s * 0.5,  s * 0.48),   # belakang-kiri
+        ]
+        for wdx, wdy in wheel_positions:
+            wc = _rot(wdx, wdy)
+            # Ban (hitam)
+            w_pts = [
+                _irot(wdx - wheel_w * 0.5, wdy - wheel_h * 0.5),
+                _irot(wdx + wheel_w * 0.5, wdy - wheel_h * 0.5),
+                _irot(wdx + wheel_w * 0.5, wdy + wheel_h * 0.5),
+                _irot(wdx - wheel_w * 0.5, wdy + wheel_h * 0.5),
+            ]
+            pygame.draw.polygon(surf, (30, 30, 30), w_pts)
+            # Rim (abu-abu)
+            rim_r = max(1, int(s * 0.05))
+            pygame.draw.circle(surf, (160, 165, 170), (int(wc[0]), int(wc[1])), rim_r)
+
+        # ── 9. Headlights (lampu depan ganda + glow) ─────────
+        hl_positions = [
+            (s * 1.05, -s * 0.3),
+            (s * 1.05,  s * 0.3),
+        ]
+        for hdx, hdy in hl_positions:
+            hp = _rot(hdx, hdy)
+            hl_r = max(2, int(s * 0.1))
+            # Glow effect
+            glow_r = max(4, int(s * 0.25))
+            glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surf, (255, 255, 200, 50), (glow_r, glow_r), glow_r)
+            pygame.draw.circle(glow_surf, (255, 255, 220, 100), (glow_r, glow_r), glow_r // 2)
+            surf.blit(glow_surf, (int(hp[0] - glow_r), int(hp[1] - glow_r)))
+            # Lampu inti
+            pygame.draw.circle(surf, (255, 255, 230), (int(hp[0]), int(hp[1])), hl_r)
+            pygame.draw.circle(surf, (255, 255, 255), (int(hp[0]), int(hp[1])), max(1, hl_r // 2))
+
+        # ── 10. Tail lights (lampu belakang merah) ────────────
+        tl_positions = [
+            (-s * 0.78, -s * 0.35),
+            (-s * 0.78,  s * 0.35),
+        ]
+        for tdx, tdy in tl_positions:
+            tp = _rot(tdx, tdy)
+            tl_r = max(1, int(s * 0.07))
+            pygame.draw.circle(surf, (255, 30, 20), (int(tp[0]), int(tp[1])), tl_r)
+            pygame.draw.circle(surf, (255, 100, 80), (int(tp[0]), int(tp[1])), max(1, tl_r + 1), 1)
+
+        # ── 11. Border outline bodi ──────────────────────────
+        pygame.draw.polygon(surf, (15, 100, 35), body_pts, max(1, int(s * 0.04)))
 
 
 # ══════════════════════════════════════════════════════════════
