@@ -22,78 +22,77 @@ DASH_ON  = 10           # Panjang segmen garis (piksel)
 DASH_OFF = 8            # Panjang celah antar garis (piksel)
 
 # ══════════════════════════════════════════════════════════════
-# REALISTIC CITY COLOUR PALETTE
+# CYBERPUNK NEON COLOUR PALETTE
 # ══════════════════════════════════════════════════════════════
-C_BG       = (25,  45,  28)    # Warna latar belakang layar (hijau gelap)
-C_GRASS    = (52, 120,  52)    # Warna rumput — hijau cerah realistis
-C_SW       = (58, 105,  50)    # Warna trotoar — hijau sedikit lebih gelap (rumput rapi)
-C_ROAD     = (58,  58,  62)    # Warna badan jalan — aspal abu gelap
-C_DASH     = (220, 210, 170)   # Warna garis putus-putus — kuning pucat
-C_PATH     = (255, 60,  50)    # Warna overlay jalur hasil pathfinding (merah)
-C_EXPLORED = (40,  80,  140)   # Warna overlay node yang dijelajahi algoritma
-C_ORIGIN   = (0,   220, 80)    # Warna marker titik asal / origin
-C_DEST     = (220, 50,  50)    # Warna marker titik tujuan / destination
-C_UI       = (200, 220, 240)   # Warna teks utama UI
-C_UIK      = (140, 160, 190)   # Warna teks label/key UI
-C_PANEL    = (20,  28,  38)    # Warna latar panel kiri
-C_BTN_BG   = (28,  36,  48)    # Warna latar tombol (normal)
-C_BTN_BD   = (0,   180, 255)   # Warna border tombol
-C_BTN_TXT  = (200, 220, 255)   # Warna teks tombol
-C_BTN_HOV  = (40,  60,  80)    # Warna latar tombol saat hover
+# Ground colors dibuat hampir identik agar tile tidak terlihat kotak-kotak
+C_BG       = (8,   6,   16)    # Latar belakang layar (hampir hitam, purple tint)
+C_GRASS    = (15,  13,  25)    # Ground tile — gelap purple-gray
+C_SW       = (17,  15,  27)    # Trotoar — hampir identik dengan ground (fix kotak2)
+C_ROAD     = (55,  55,  68)    # Badan jalan — aspal terang (kontras dengan ground gelap)
+C_DASH     = (0,   200, 255)   # Garis putus-putus — neon cyan
+C_PATH     = (255, 40,  120)   # Overlay jalur pathfinding — neon magenta
+C_EXPLORED = (50,  15,  65)    # Overlay node yang dijelajahi — purple gelap
+C_ORIGIN   = (0,   255, 200)   # Marker titik asal — neon teal
+C_DEST     = (255, 40,  80)    # Marker titik tujuan — neon pink
+C_UI       = (200, 215, 240)   # Teks utama UI
+C_UIK      = (120, 140, 180)   # Teks label/key UI
+C_PANEL    = (12,  10,  22)    # Latar panel kiri
+C_BTN_BG   = (18,  16,  32)   # Latar tombol (normal)
+C_BTN_BD   = (0,   180, 255)  # Border tombol — neon cyan
+C_BTN_TXT  = (180, 220, 255)  # Teks tombol
+C_BTN_HOV  = (28,  24,  50)   # Latar tombol saat hover
 
 # ══════════════════════════════════════════════════════════════
-# BUILDING STYLES
+# BUILDING STYLES — CYBERPUNK NEON
 # ══════════════════════════════════════════════════════════════
-# Tiga gaya bangunan realistis dengan warna cerah dan kontras
-# Setiap style: dinding, highlight, atap, jendela menyala/mati, aksen
+# Tiga gaya bangunan: dinding gelap + jendela neon menyala
 BLDG_STYLES = [
-    # Style 0: Gedung korporat / perkantoran (abu-biru)
+    # Style 0: Gedung korporat — neon cyan
     dict(
-        wall    = (130, 145, 160),  # Dinding abu-biru cerah
-        light   = (150, 165, 180),  # Highlight sisi terang
-        roof    = (70,  90,  110),  # Atap abu gelap
-        win     = (140, 200, 255),  # Jendela menyala (biru cerah)
-        win_off = (80,  95,  110),  # Jendela mati
-        neon    = (60,  100, 140),  # Aksen border
+        wall    = (25,  30,  48),     # Dinding gelap kebiruan
+        light   = (32,  38,  58),     # Highlight sisi terang
+        roof    = (12,  16,  30),     # Atap sangat gelap
+        win     = (0,   200, 255),    # Jendela menyala — neon cyan
+        win_off = (18,  22,  38),     # Jendela mati
+        neon    = (0,   140, 200),    # Aksen neon cyan
     ),
-    # Style 1: Apartemen / residential (krem-coklat)
+    # Style 1: Apartemen / residential — neon magenta
     dict(
-        wall    = (170, 140, 110),  # Dinding krem hangat
-        light   = (185, 155, 125),  # Highlight
-        roof    = (160, 65,  45),   # Atap merah bata
-        win     = (255, 220, 160),  # Jendela menyala (kuning hangat)
-        win_off = (110, 90,  70),   # Jendela mati
-        neon    = (140, 100, 65),   # Aksen border
+        wall    = (35,  22,  42),     # Dinding gelap keunguan
+        light   = (45,  30,  55),     # Highlight
+        roof    = (22,  12,  28),     # Atap gelap
+        win     = (255, 60,  180),    # Jendela menyala — neon magenta
+        win_off = (28,  18,  35),     # Jendela mati
+        neon    = (200, 40,  140),    # Aksen neon magenta
     ),
-    # Style 2: Komersial / mall (abu-kuning)
+    # Style 2: Komersial — neon lime/hijau
     dict(
-        wall    = (150, 148, 130),  # Dinding abu cerah
-        light   = (165, 162, 145),  # Highlight
-        roof    = (85,  110, 140),  # Atap biru-abu
-        win     = (200, 230, 255),  # Jendela menyala (putih-biru)
-        win_off = (100, 98,  85),   # Jendela mati
-        neon    = (90,  120, 150),  # Aksen border
+        wall    = (22,  35,  30),     # Dinding gelap kehijauan
+        light   = (28,  45,  38),     # Highlight
+        roof    = (14,  24,  20),     # Atap gelap
+        win     = (100, 255, 160),    # Jendela menyala — neon lime
+        win_off = (16,  28,  22),     # Jendela mati
+        neon    = (60,  200, 120),    # Aksen neon lime
     ),
 ]
 
 # ══════════════════════════════════════════════════════════════
-# LOD & PATHFINDING COLORS
+# LOD & PATHFINDING COLORS — CYBERPUNK NEON
 # ══════════════════════════════════════════════════════════════
 LOD_FAR_ZOOM = 0.20   # zoom < ini -> LOD 0 (jauh: blok warna saja)
-LOD_MED_ZOOM = 0.55   # zoom < ini -> LOD 1 (sedang: bangunan, jalan, lampu), >= ini -> LOD 2 (dekat)
+LOD_MED_ZOOM = 0.55   # zoom < ini -> LOD 1 (sedang), >= ini -> LOD 2 (dekat)
 
-# Warna pathfinding dan node eksplorasi per algoritma (MERAH)
-# A* (merah cerah / bright red)
-C_PATH_ASTAR         = (255, 50,  40)
-C_EXPL_ASTAR         = (100, 20,  15)
-C_PATH_OUTLINE_ASTAR = (150, 25,  20)
+# A* (neon magenta/pink)
+C_PATH_ASTAR         = (255, 40,  120)
+C_EXPL_ASTAR         = (80,  10,  40)
+C_PATH_OUTLINE_ASTAR = (180, 20,  80)
 
-# Dijkstra (crimson / merah gelap)
-C_PATH_DIJKSTRA         = (220, 30,  30)
-C_EXPL_DIJKSTRA         = (90,  15,  15)
-C_PATH_OUTLINE_DIJKSTRA = (130, 20,  20)
+# Dijkstra (neon purple)
+C_PATH_DIJKSTRA         = (180, 40,  255)
+C_EXPL_DIJKSTRA         = (55,  10,  80)
+C_PATH_OUTLINE_DIJKSTRA = (120, 20,  180)
 
-# BFS (dark rose / merah keunguan)
-C_PATH_BFS         = (230, 40,  60)
-C_EXPL_BFS         = (95,  15,  25)
-C_PATH_OUTLINE_BFS = (140, 20,  35)
+# BFS (neon orange)
+C_PATH_BFS         = (255, 140, 20)
+C_EXPL_BFS         = (80,  42,  5)
+C_PATH_OUTLINE_BFS = (180, 95,  10)
