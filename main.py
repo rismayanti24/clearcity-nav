@@ -1,5 +1,5 @@
 """
-kelompok.py
+main.py
 ===========
 Entry point utama simulasi navigasi kota.
 Berisi kelas ClearCityNav (controller/aplikasi) dan main game loop.
@@ -157,11 +157,10 @@ class ClearCityNav:
         
     # ── Anggota kelompok (ubah sesuai nama tim) ──────────────────
     _MEMBERS = [
-        "1. Nama Anggota 1",
-        "2. Nama Anggota 2",
-        "3. Nama Anggota 3",
-        "4. Nama Anggota 4",
-        "5. Nama Anggota 5",
+        "1. Rismayanti — 2401020041",
+        "2. Nikita Arzetty Siregar — 2401020030",
+        "3. Erlinda Amira Putri Sudarmono — 2401020021",
+        "4. Dhini Khairunnisa — 2401020016",
     ]
 
     # Menampilkan layar loading saat proses generate map berlangsung
@@ -852,8 +851,8 @@ class ClearCityNav:
         # Fill with grass color
         surf.fill(C_GRASS)
         
-        C_ROAD_LOD0       = (58,  58,  62)
-        C_INTERSECT_LOD0  = (75,  75,  80)
+        C_ROAD_LOD0       = (50,  50,  62)
+        C_INTERSECT_LOD0  = (65,  65,  78)
         _BLDG_TYPES = (ENV_B0, ENV_B1, ENV_B2,
                        ENV_RUMAH, ENV_RUKO, ENV_MASJID,
                        ENV_SPBU, ENV_TAMAN)
@@ -897,7 +896,7 @@ class ClearCityNav:
                     ev = self.env[r][c] if self.env else ENV_NONE
                     if lod == 0:
                         if ev in _BLDG_TYPES:
-                            pygame.draw.rect(surf, (140, 130, 115), (tx, ty, isz, isz))
+                            pygame.draw.rect(surf, (25, 22, 38), (tx, ty, isz, isz))
                     elif lod == 1:
                         if ev != ENV_TREE:
                             scaled = self._get_scaled_env(ev, c, r, isz)
