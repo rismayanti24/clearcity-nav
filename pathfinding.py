@@ -1,4 +1,4 @@
-"""
+master"""
 pathfinding.py
 ==============
 Modul algoritma pencarian jalur (pathfinding) dan konversi jalur ke dunia nyata.

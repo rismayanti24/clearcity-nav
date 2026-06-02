@@ -95,4 +95,8 @@ C_PATH_OUTLINE_DIJKSTRA = (120, 20,  180)
 # BFS (neon orange)
 C_PATH_BFS         = (255, 140, 20)
 C_EXPL_BFS         = (80,  42,  5)
+
 C_PATH_OUTLINE_BFS = (180, 95,  10)
+=======
+C_PATH_OUTLINE_BFS = (180, 95,  10)
+
