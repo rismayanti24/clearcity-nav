@@ -851,4 +851,4 @@ def build_minimap(grid, size=150):
             pygame.draw.rect(s, col, (x, y, w, w))
 
     pygame.draw.rect(s, C_BTN_BD, (0, 0, size, size), 1)
-    return 
+    return s
